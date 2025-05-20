@@ -429,21 +429,22 @@ public static class NetworkRequestManager
     }
 
     /// <summary>
-    /// Try to send a GET request and deserialize JSON response to T. Returns true if successful, false otherwise.
+    /// Try to send a GET request and deserialize JSON response to T. Returns (success, result).
     /// </summary>
-    public static async Task<bool> TryGetJsonAsync<T>(
+    public static async Task<(bool Success, T Result)> TryGetJsonAsync<T>(
         string url,
-        out T result,
         Dictionary<string, string> headers = null,
         CancellationToken cancellationToken = default)
     {
-        result = default;
         try
         {
-            result = await GetJsonAsync<T>(url, headers, cancellationToken);
-            return true;
+            var result = await GetJsonAsync<T>(url, headers, cancellationToken);
+            return (true, result);
         }
-        catch { return false; }
+        catch
+        {
+            return (false, default);
+        }
     }
 
     /// <summary>

@@ -7,11 +7,11 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
+using System.IO.Compression;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Schema;
 using Newtonsoft.Json.Converters;
-using Newtonsoft.Json; // Ensure this is present for JsonConverter
 using UnityEngine;
 using UnityEngine.Networking;
 #if UNITY_EDITOR
@@ -134,13 +134,13 @@ public static class JsonHelper
         // Schema Validation
         //--------------------------------------------------------------------------------
 
-        public static void ValidateSchema(string json, string schemaJson)
-        {
-            var schema = JSchema.Parse(schemaJson);
-            var token  = JToken.Parse(json);
-            if (!token.IsValid(schema, out IList<string> errors))
-                throw new JsonSchemaException("Schema validation failed: " + string.Join("; ", errors));
-        }
+        // public static void ValidateSchema(string json, string schemaJson)
+        // {
+        //     var schema = JSchema.Parse(schemaJson);
+        //     var token  = JToken.Parse(json);
+        //     if (!token.IsValid(schema, out IList<string> errors))
+        //         throw new JsonSchemaException("Schema validation failed: " + string.Join("; ", errors));
+        // }
 
         //--------------------------------------------------------------------------------
         // Merge & Diff
@@ -353,59 +353,59 @@ public static class JsonHelper
             return JsonConvert.DeserializeObject<T>(req.downloadHandler.text);
         }
 
-        //--------------------------------------------------------------------------------
-        // Firebase Firestore Integration
-        //--------------------------------------------------------------------------------
+        // //--------------------------------------------------------------------------------
+        // // Firebase Firestore Integration
+        // //--------------------------------------------------------------------------------
 
-        /// <summary>Initialize Firebase (call once on startup).</summary>
-        public static async Task InitializeFirebaseAsync()
-        {
-            var status = await FirebaseApp.CheckAndFixDependenciesAsync().ConfigureAwait(false);
-            if (status != DependencyStatus.Available)
-                throw new Exception($"Firebase init failed: {status}");
-        }
+        // /// <summary>Initialize Firebase (call once on startup).</summary>
+        // public static async Task InitializeFirebaseAsync()
+        // {
+        //     var status = await FirebaseApp.CheckAndFixDependenciesAsync().ConfigureAwait(false);
+        //     if (status != DependencyStatus.Available)
+        //         throw new Exception($"Firebase init failed: {status}");
+        // }
 
-        /// <summary>Write any object to Firestore.</summary>
-        public static Task WriteToFirestoreAsync(string collection, string document, object data)
-        {
-            var db = FirebaseFirestore.DefaultInstance;
-            var json = Serialize(data);
-            var dict = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
-            return db.Collection(collection).Document(document).SetAsync(dict);
-        }
+        // /// <summary>Write any object to Firestore.</summary>
+        // public static Task WriteToFirestoreAsync(string collection, string document, object data)
+        // {
+        //     var db = FirebaseFirestore.DefaultInstance;
+        //     var json = Serialize(data);
+        //     var dict = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+        //     return db.Collection(collection).Document(document).SetAsync(dict);
+        // }
 
-        /// <summary>Read a Firestore document as dictionary.</summary>
-        public static async Task<Dictionary<string, object>> ReadFromFirestoreAsync(string collection, string document)
-        {
-            var db = FirebaseFirestore.DefaultInstance;
-            var snap = await db.Collection(collection).Document(document).GetSnapshotAsync().ConfigureAwait(false);
-            return snap.Exists ? snap.ToDictionary() : null;
-        }
+        // /// <summary>Read a Firestore document as dictionary.</summary>
+        // public static async Task<Dictionary<string, object>> ReadFromFirestoreAsync(string collection, string document)
+        // {
+        //     var db = FirebaseFirestore.DefaultInstance;
+        //     var snap = await db.Collection(collection).Document(document).GetSnapshotAsync().ConfigureAwait(false);
+        //     return snap.Exists ? snap.ToDictionary() : null;
+        // }
 
-        /// <summary>Read entire Firestore collection.</summary>
-        public static async Task<List<Dictionary<string, object>>> ReadCollectionAsync(string collection)
-        {
-            var db = FirebaseFirestore.DefaultInstance;
-            var snap = await db.Collection(collection).GetSnapshotAsync().ConfigureAwait(false);
-            return snap.Documents.Select(d => d.ToDictionary()).ToList();
-        }
+        // /// <summary>Read entire Firestore collection.</summary>
+        // public static async Task<List<Dictionary<string, object>>> ReadCollectionAsync(string collection)
+        // {
+        //     var db = FirebaseFirestore.DefaultInstance;
+        //     var snap = await db.Collection(collection).GetSnapshotAsync().ConfigureAwait(false);
+        //     return snap.Documents.Select(d => d.ToDictionary()).ToList();
+        // }
 
-        /// <summary>Update single field in Firestore document.</summary>
-        public static Task UpdateFirestoreFieldAsync(
-            string collection, string document, string fieldPath, object value)
-        {
-            var db = FirebaseFirestore.DefaultInstance;
-            return db.Collection(collection).Document(document).UpdateAsync(fieldPath, value);
-        }
+        // /// <summary>Update single field in Firestore document.</summary>
+        // public static Task UpdateFirestoreFieldAsync(
+        //     string collection, string document, string fieldPath, object value)
+        // {
+        //     var db = FirebaseFirestore.DefaultInstance;
+        //     return db.Collection(collection).Document(document).UpdateAsync(fieldPath, value);
+        // }
 
-        //--------------------------------------------------------------------------------
-        // JSON Patch (RFC 6902) support - requires Marvin.JsonPatch
-        //--------------------------------------------------------------------------------
-        public static void ApplyJsonPatch<T>(ref T target, string patchJson)
-        {
-            var patchDoc = JsonConvert.DeserializeObject<Marvin.JsonPatch.JsonPatchDocument<T>>(patchJson);
-            patchDoc.ApplyTo(target);
-        }
+        // //--------------------------------------------------------------------------------
+        // // JSON Patch (RFC 6902) support - requires Marvin.JsonPatch
+        // //--------------------------------------------------------------------------------
+        // public static void ApplyJsonPatch<T>(ref T target, string patchJson)
+        // {
+        //     var patchDoc = JsonConvert.DeserializeObject<Marvin.JsonPatch.JsonPatchDocument<T>>(patchJson);
+        //     patchDoc.ApplyTo(target);
+        // }
 
         //--------------------------------------------------------------------------------
         // Versioning / Migration Hooks
