@@ -111,7 +111,9 @@ public static class AssetBundleManager
             $"{url}/{bundleName}", crc, 0);          // GET :contentReference[oaicite:2]{index=2}
         if (useCache) req.SetRequestHeader("Cache-Control", "max-age=0"); // browser-style caching
 
-        await req.SendWebRequest();
+        var asyncOp = req.SendWebRequest();
+        while (!asyncOp.isDone)
+            await Task.Yield();
 
         if (req.result != UnityWebRequest.Result.Success)
             throw new Exception($"Download error: {req.error}");
