@@ -30,7 +30,7 @@ public static class FirebaseHelper
         {
             // Initialize Firebase
             var app = await FirebaseApp.CheckAndFixDependenciesAsync();
-            if (app.Result != DependencyStatus.Available)
+            if (app != DependencyStatus.Available)
             {
                 Debug.LogError("Could not resolve Firebase dependencies");
                 return false;
