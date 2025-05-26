@@ -1,0 +1,68 @@
+{
+    "movement_tutorial": {
+        "Id": "movement_tutorial",
+        "Category": "basic_controls",
+        "RequiredLevel": 1,
+        "OnlyShowOnce": true,
+        "Steps": [
+            {
+                "Id": "movement_intro",
+                "DialogueKey": "tutorial.movement.intro",
+                "TargetObjectPath": "UI/MovementControls",
+                "RequiredConditions": [],
+                "CompletionCondition": "PlayerMoved",
+                "CustomData": {
+                    "highlightDuration": 3.0
+                }
+            },
+            {
+                "Id": "movement_jump",
+                "DialogueKey": "tutorial.movement.jump",
+                "TargetObjectPath": "UI/JumpButton",
+                "RequiredConditions": ["PlayerMoved"],
+                "CompletionCondition": "PlayerJumped",
+                "CustomData": {
+                    "highlightDuration": 2.0
+                }
+            }
+        ],
+        "Dependencies": [],
+        "CustomData": {
+            "priority": 1,
+            "requiredForProgression": true
+        }
+    },
+    "combat_tutorial": {
+        "Id": "combat_tutorial",
+        "Category": "combat",
+        "RequiredLevel": 2,
+        "OnlyShowOnce": true,
+        "Steps": [
+            {
+                "Id": "combat_weapon",
+                "DialogueKey": "tutorial.combat.weapon",
+                "TargetObjectPath": "UI/WeaponSlot",
+                "RequiredConditions": [],
+                "CompletionCondition": "WeaponEquipped",
+                "CustomData": {
+                    "weaponType": "sword"
+                }
+            },
+            {
+                "Id": "combat_attack",
+                "DialogueKey": "tutorial.combat.attack",
+                "TargetObjectPath": "UI/AttackButton",
+                "RequiredConditions": ["WeaponEquipped"],
+                "CompletionCondition": "PlayerAttacked",
+                "CustomData": {
+                    "requiredHits": 1
+                }
+            }
+        ],
+        "Dependencies": ["movement_tutorial"],
+        "CustomData": {
+            "priority": 2,
+            "requiredForProgression": true
+        }
+    }
+}

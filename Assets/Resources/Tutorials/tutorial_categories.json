@@ -1,0 +1,23 @@
+{
+    "basic_controls": {
+        "Id": "basic_controls",
+        "Name": "Basic Controls",
+        "Description": "Learn the fundamental controls of the game",
+        "TutorialIds": ["movement_tutorial"],
+        "SortOrder": 1
+    },
+    "combat": {
+        "Id": "combat",
+        "Name": "Combat Training",
+        "Description": "Master the art of combat",
+        "TutorialIds": ["combat_tutorial", "advanced_combat_tutorial"],
+        "SortOrder": 2
+    },
+    "inventory": {
+        "Id": "inventory",
+        "Name": "Inventory Management",
+        "Description": "Learn how to manage your inventory and items",
+        "TutorialIds": ["inventory_basics", "crafting_tutorial"],
+        "SortOrder": 3
+    }
+}
