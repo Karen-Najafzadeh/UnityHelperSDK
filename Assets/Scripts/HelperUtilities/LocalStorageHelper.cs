@@ -214,7 +214,7 @@ public static class LocalStorageHelper
             {
                 Version = version,
                 CacheDate = DateTime.UtcNow,
-                Size = bundle.memoryBudget
+                Size = (uint)new FileInfo(AssetBundleManager.GetBundleFilePath(bundleName)).Length
             };
 
             await SaveDataAsync($"bundle_{bundleName}_meta", metadata);

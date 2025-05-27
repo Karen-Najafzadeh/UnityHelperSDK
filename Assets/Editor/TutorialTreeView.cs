@@ -1,78 +1,160 @@
+using UnityEngine;
 using UnityEngine.UIElements;
+using UnityEditor;
+using UnityEditor.UIElements;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
-public class TutorialTreeView : VisualElement
+namespace UnityHelperSDK.Editor
 {
-    public delegate void SelectionChangedHandler(string categoryId, string tutorialId);
-    public event SelectionChangedHandler OnSelectionChanged;
-
-    private TreeView _treeView;
-    private Dictionary<string, TutorialCategory> _categories;
-    private Dictionary<string, TutorialDefinition> _tutorials;
-
-    public TutorialTreeView(Dictionary<string, TutorialCategory> categories, Dictionary<string, TutorialDefinition> tutorials)
+    /// <summary>
+    /// A custom TreeView implementation for displaying and managing tutorials.
+    /// </summary>
+    public class TutorialTreeView : VisualElement
     {
-        _categories = categories;
-        _tutorials = tutorials;
-        
-        style.flexGrow = 1;
-        
-        _treeView = new TreeView();
-        _treeView.style.flexGrow = 1;
-        _treeView.selectionType = SelectionType.Single;
-        _treeView.itemsChosen += OnItemChosen;
-        _treeView.selectionChanged += OnSelectionChanged;
+        public delegate void TutorialSelectionChangedHandler(string categoryId, string tutorialId);
+        public event TutorialSelectionChangedHandler OnTutorialSelectionChanged;
 
-        Add(_treeView);
-        Refresh(categories, tutorials);
-    }
+        private TreeView _treeView;
+        private Dictionary<string, TutorialCategory> _categories;
+        private Dictionary<string, TutorialDefinition> _tutorials;
+        private const float ITEM_HEIGHT = 24f;
+        private List<TreeViewItemData<TutorialItemData>> _items;
 
-    public void Refresh(Dictionary<string, TutorialCategory> categories, Dictionary<string, TutorialDefinition> tutorials)
-    {
-        _categories = categories;
-        _tutorials = tutorials;
-
-        var root = new TreeViewItem { id = 0, displayName = "Tutorials" };
-        var items = new List<TreeViewItem> { root };
-        var id = 1;
-
-        foreach (var category in _categories.Values.OrderBy(c => c.SortOrder))
+        /// <summary>
+        /// Initializes a new instance of the TutorialTreeView.
+        /// </summary>
+        /// <param name="categories">Dictionary of tutorial categories</param>
+        /// <param name="tutorials">Dictionary of tutorial definitions</param>
+        public TutorialTreeView(Dictionary<string, TutorialCategory> categories, Dictionary<string, TutorialDefinition> tutorials)
         {
-            var categoryItem = new TreeViewItem { id = id++, displayName = category.Name };
-            categoryItem.userData = new TreeItemData { CategoryId = category.Id };
-            items.Add(categoryItem);
+            _categories = categories ?? new Dictionary<string, TutorialCategory>();
+            _tutorials = tutorials ?? new Dictionary<string, TutorialDefinition>();
+            
+            style.flexGrow = 1;
 
-            if (category.TutorialIds != null)
+            _treeView = new TreeView
             {
-                foreach (var tutorialId in category.TutorialIds)
+                fixedItemHeight = ITEM_HEIGHT,
+                selectionType = SelectionType.Single,
+                showBorder = true,
+                showAlternatingRowBackgrounds = AlternatingRowBackground.All
+            };
+
+            _treeView.style.flexGrow = 1;
+            _treeView.viewDataKey = "TutorialTreeView";
+            
+            // Setup makeItem and bindItem
+            _treeView.makeItem = () => {
+                var item = new Label();
+                item.style.paddingLeft = 4;
+                item.style.unityTextAlign = TextAnchor.MiddleLeft;
+                item.style.height = ITEM_HEIGHT;
+                return item;
+            };
+
+            _treeView.bindItem = (element, index) => 
+            {
+                var item = element as Label;
+                var itemData = _treeView.GetItemDataForIndex<TutorialItemData>(index);
+                if (item != null && itemData != null)
                 {
-                    if (_tutorials.TryGetValue(tutorialId, out var tutorial))
+                    item.text = itemData.displayName;
+                    item.style.color = string.IsNullOrEmpty(itemData.tutorialId) ? 
+                        new Color(0.7f, 0.7f, 0.7f) : // Category color
+                        Color.white; // Tutorial color
+                    item.style.unityFontStyleAndWeight = string.IsNullOrEmpty(itemData.tutorialId) ? 
+                        FontStyle.Bold : FontStyle.Normal;
+                }
+            };
+            
+            _treeView.selectionChanged += OnTreeSelectionChanged;
+
+            Add(_treeView);
+            Refresh(categories, tutorials);
+        }
+
+        public void Refresh(Dictionary<string, TutorialCategory> categories, Dictionary<string, TutorialDefinition> tutorials)
+        {
+            _categories = categories ?? new Dictionary<string, TutorialCategory>();
+            _tutorials = tutorials ?? new Dictionary<string, TutorialDefinition>();
+
+            var items = new List<TreeViewItemData<TutorialItemData>>();
+            int id = 0;
+
+            // Create root item for "Tutorials"
+            var root = new TreeViewItemData<TutorialItemData>(
+                id++,
+                new TutorialItemData { displayName = "Tutorials", categoryId = "", tutorialId = "" }
+            );
+
+            // Create category items
+            var categoryItems = new List<TreeViewItemData<TutorialItemData>>();
+            foreach (var category in _categories.Values.OrderBy(c => c.SortOrder))
+            {
+                var tutorialItems = new List<TreeViewItemData<TutorialItemData>>();
+                
+                // Add tutorials for this category
+                if (category.TutorialIds != null)
+                {
+                    foreach (var tutorialId in category.TutorialIds)
                     {
-                        var tutorialItem = new TreeViewItem { id = id++, displayName = tutorial.Id };
-                        tutorialItem.userData = new TreeItemData { CategoryId = category.Id, TutorialId = tutorial.Id };
-                        items.Add(tutorialItem);
+                        if (_tutorials.TryGetValue(tutorialId, out var tutorial))
+                        {
+                            tutorialItems.Add(new TreeViewItemData<TutorialItemData>(
+                                id++,
+                                new TutorialItemData
+                                {
+                                    displayName = tutorial.Id, // Using Id since there is no Title property
+                                    categoryId = category.Id,
+                                    tutorialId = tutorial.Id
+                                }
+                            ));
+                        }
                     }
+                }
+
+                // Create category item with its tutorials as children
+                categoryItems.Add(new TreeViewItemData<TutorialItemData>(
+                    id++,
+                    new TutorialItemData 
+                    { 
+                        displayName = category.Name,
+                        categoryId = category.Id,
+                        tutorialId = ""
+                    },
+                    tutorialItems // Add tutorials as children
+                ));
+            }
+
+            // Add categories under root
+            items.Add(new TreeViewItemData<TutorialItemData>(root.id, root.data, categoryItems));
+            _items = items;
+
+            // Set the items source
+            _treeView.SetRootItems(_items);
+            _treeView.Rebuild();
+        }
+
+        private void OnTreeSelectionChanged(IEnumerable<object> items)
+        {
+            var selectedItem = items.FirstOrDefault();
+            if (selectedItem is int index)
+            {
+                var itemData = _treeView.GetItemDataForIndex<TutorialItemData>(index);
+                if (itemData != null && !string.IsNullOrEmpty(itemData.tutorialId))
+                {
+                    OnTutorialSelectionChanged?.Invoke(itemData.categoryId, itemData.tutorialId);
                 }
             }
         }
 
-        _treeView.SetRootItems(new[] { root });
-        _treeView.SetItems(items);
-    }
-
-    private void OnItemChosen(IEnumerable<TreeViewItem> items)
-    {
-        var item = items.FirstOrDefault();
-        if (item?.userData is TreeItemData data)
+        private class TutorialItemData
         {
-            OnSelectionChanged?.Invoke(data.CategoryId, data.TutorialId);
+            public string displayName;
+            public string categoryId;
+            public string tutorialId;
         }
-    }
-
-    private class TreeItemData
-    {
-        public string CategoryId;
-        public string TutorialId;
     }
 }
