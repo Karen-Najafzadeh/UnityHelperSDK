@@ -26,14 +26,12 @@ public static class DebugHelper
     
     // Performance monitoring
     private static readonly Dictionary<string, Stopwatch> _stopwatches = new Dictionary<string, Stopwatch>();
-    private static readonly Dictionary<string, float> _frameTimers = new Dictionary<string, float>();
     
     // FPS tracking
-    private static float _fpsUpdateInterval = 0.5f;
-    private static float _fpsAccumulator;
-    private static int _fpsFrameCount;
-    private static float _currentFps;
+    private static readonly Queue<float> _fpsBuffer = new Queue<float>();
+    private static readonly int _fpsBufferSize = 60;
     private static float _lastFpsUpdate;
+    private static readonly float _fpsUpdateInterval = 0.5f;
     
     #region Logging
     
@@ -43,36 +41,39 @@ public static class DebugHelper
     [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
     public static void Log(string message, string category = "General", LogLevel level = LogLevel.Info)
     {
-        if (!_enableLogging)
+        if (!ShouldLog(category, level))
             return;
-            
-        if (_categoryLevels.TryGetValue(category, out var minLevel) && level < minLevel)
-            return;
-            
-        _logBuilder.Length = 0;
-        _logBuilder.Append($"[{category}] ");
-        _logBuilder.Append(message);
+
+        var formattedMessage = $"[{category}] {message}";
         
         switch (level)
         {
-            case LogLevel.Error:
-                Debug.LogError(_logBuilder.ToString());
+            case LogLevel.Debug:
+                Debug.Log(formattedMessage);
+                break;
+            case LogLevel.Info:
+                Debug.Log(formattedMessage);
                 break;
             case LogLevel.Warning:
-                Debug.LogWarning(_logBuilder.ToString());
+                Debug.LogWarning(formattedMessage);
                 break;
-            default:
-                Debug.Log(_logBuilder.ToString());
+            case LogLevel.Error:
+                Debug.LogError(formattedMessage);
                 break;
         }
     }
-    
+
     /// <summary>
     /// Set minimum log level for a category
     /// </summary>
     public static void SetCategoryLevel(string category, LogLevel level)
     {
         _categoryLevels[category] = level;
+    }
+
+    private static bool ShouldLog(string category, LogLevel level)
+    {
+        return !_categoryLevels.TryGetValue(category, out var minLevel) || level >= minLevel;
     }
     
     #endregion
@@ -107,105 +108,110 @@ public static class DebugHelper
         }
     }
     
-    /// <summary>
-    /// Track frame time for operations
-    /// </summary>
-    [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
-    public static void TrackFrameTime(string id)
-    {
-        if (!_frameTimers.ContainsKey(id))
-            _frameTimers[id] = 0;
-            
-        _frameTimers[id] += Time.deltaTime;
-    }
-    
-    /// <summary>
-    /// Get average frame time
-    /// </summary>
-    public static float GetAverageFrameTime(string id, int frames = 60)
-    {
-        if (_frameTimers.TryGetValue(id, out float total))
-        {
-            float average = total / frames;
-            _frameTimers[id] = 0;
-            return average;
-        }
-        return 0;
-    }
-    
     #endregion
     
     #region Visual Debugging
     
     /// <summary>
-    /// Draw a debug sphere that persists for a specified duration
+    /// Draw a debug sphere that persists
     /// </summary>
     [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
-    public static void DrawSphere(Vector3 position, float radius, Color color, float duration = 0)
+    public static void DrawPersistentSphere(Vector3 position, float radius, Color color)
     {
-        if (duration > 0)
-            Debug.DrawLine(position + Vector3.up * radius, position - Vector3.up * radius, color, duration);
-            
-        UnityEngine.Debug.DrawLine(position + Vector3.right * radius, position - Vector3.right * radius, color, duration);
-        UnityEngine.Debug.DrawLine(position + Vector3.forward * radius, position - Vector3.forward * radius, color, duration);
+        Debug.DrawLine(position + Vector3.up * radius, position - Vector3.up * radius, color, float.MaxValue);
+        Debug.DrawLine(position + Vector3.right * radius, position - Vector3.right * radius, color, float.MaxValue);
+        Debug.DrawLine(position + Vector3.forward * radius, position - Vector3.forward * radius, color, float.MaxValue);
     }
-    
+
     /// <summary>
-    /// Draw text in the scene view
-    /// </summary>
-    [Conditional("UNITY_EDITOR")]
-    public static void DrawText(Vector3 position, string text, Color color)
-    {
-#if UNITY_EDITOR
-        UnityEditor.Handles.Label(position, text);
-#endif
-    }
-    
-    /// <summary>
-    /// Draw a debug path from a list of points
+    /// Draw a debug box that persists
     /// </summary>
     [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
-    public static void DrawPath(Vector3[] points, Color color, float duration = 0)
+    public static void DrawPersistentBox(Vector3 center, Vector3 size, Color color)
     {
-        for (int i = 0; i < points.Length - 1; i++)
-        {
-            Debug.DrawLine(points[i], points[i + 1], color, duration);
-        }
+        Vector3 halfSize = size * 0.5f;
+        Debug.DrawLine(center + new Vector3(-halfSize.x, -halfSize.y, -halfSize.z), 
+                      center + new Vector3(halfSize.x, -halfSize.y, -halfSize.z), color, float.MaxValue);
+        Debug.DrawLine(center + new Vector3(-halfSize.x, -halfSize.y, halfSize.z), 
+                      center + new Vector3(halfSize.x, -halfSize.y, halfSize.z), color, float.MaxValue);
+        Debug.DrawLine(center + new Vector3(-halfSize.x, halfSize.y, -halfSize.z), 
+                      center + new Vector3(halfSize.x, halfSize.y, -halfSize.z), color, float.MaxValue);
+        Debug.DrawLine(center + new Vector3(-halfSize.x, halfSize.y, halfSize.z), 
+                      center + new Vector3(halfSize.x, halfSize.y, halfSize.z), color, float.MaxValue);
+        
+        Debug.DrawLine(center + new Vector3(-halfSize.x, -halfSize.y, -halfSize.z), 
+                      center + new Vector3(-halfSize.x, halfSize.y, -halfSize.z), color, float.MaxValue);
+        Debug.DrawLine(center + new Vector3(halfSize.x, -halfSize.y, -halfSize.z), 
+                      center + new Vector3(halfSize.x, halfSize.y, -halfSize.z), color, float.MaxValue);
+        Debug.DrawLine(center + new Vector3(-halfSize.x, -halfSize.y, halfSize.z), 
+                      center + new Vector3(-halfSize.x, halfSize.y, halfSize.z), color, float.MaxValue);
+        Debug.DrawLine(center + new Vector3(halfSize.x, -halfSize.y, halfSize.z), 
+                      center + new Vector3(halfSize.x, halfSize.y, halfSize.z), color, float.MaxValue);
+        
+        Debug.DrawLine(center + new Vector3(-halfSize.x, -halfSize.y, -halfSize.z), 
+                      center + new Vector3(-halfSize.x, -halfSize.y, halfSize.z), color, float.MaxValue);
+        Debug.DrawLine(center + new Vector3(halfSize.x, -halfSize.y, -halfSize.z), 
+                      center + new Vector3(halfSize.x, -halfSize.y, halfSize.z), color, float.MaxValue);
+        Debug.DrawLine(center + new Vector3(-halfSize.x, halfSize.y, -halfSize.z), 
+                      center + new Vector3(-halfSize.x, halfSize.y, halfSize.z), color, float.MaxValue);
+        Debug.DrawLine(center + new Vector3(halfSize.x, halfSize.y, -halfSize.z), 
+                      center + new Vector3(halfSize.x, halfSize.y, halfSize.z), color, float.MaxValue);
     }
+
+    #endregion
     
+    #region Memory Tracking
+
+    /// <summary>
+    /// Get current memory usage statistics
+    /// </summary>
+    [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
+    public static void LogMemoryStats()
+    {
+        var stats = new StringBuilder();
+        stats.AppendLine("Memory Statistics:");
+        stats.AppendLine($"Total Allocated: {UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1024 / 1024}MB");
+        stats.AppendLine($"Total Reserved: {UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1024 / 1024}MB");
+        stats.AppendLine($"Mono Heap: {UnityEngine.Profiling.Profiler.GetMonoHeapSizeLong() / 1024 / 1024}MB");
+        stats.AppendLine($"Mono Used: {UnityEngine.Profiling.Profiler.GetMonoUsedSizeLong() / 1024 / 1024}MB");
+        Log(stats.ToString(), "Memory", LogLevel.Debug);
+    }
+
     #endregion
     
     #region FPS Counter
-    
+
     /// <summary>
-    /// Update FPS counter (call from Update)
+    /// Update FPS counter (call this from Update)
     /// </summary>
+    [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
     public static void UpdateFPS()
     {
-        _fpsFrameCount++;
-        _fpsAccumulator += Time.unscaledDeltaTime;
-        
-        if (Time.unscaledTime - _lastFpsUpdate >= _fpsUpdateInterval)
+        if (Time.unscaledTime > _lastFpsUpdate + _fpsUpdateInterval)
         {
-            _currentFps = _fpsFrameCount / _fpsAccumulator;
-            _fpsFrameCount = 0;
-            _fpsAccumulator = 0;
             _lastFpsUpdate = Time.unscaledTime;
+            float fps = 1f / Time.unscaledDeltaTime;
+            _fpsBuffer.Enqueue(fps);
+            if (_fpsBuffer.Count > _fpsBufferSize)
+                _fpsBuffer.Dequeue();
         }
     }
-    
+
     /// <summary>
-    /// Get current FPS
+    /// Get average FPS over the last buffer period
     /// </summary>
-    public static float GetFPS()
+    public static float GetAverageFPS()
     {
-        return _currentFps;
+        if (_fpsBuffer.Count == 0)
+            return 0f;
+        float sum = 0f;
+        foreach (var fps in _fpsBuffer)
+            sum += fps;
+        return sum / _fpsBuffer.Count;
     }
-    
+
     #endregion
-    
-    #region Helper Types
-    
+
     public enum LogLevel
     {
         Debug,
@@ -213,6 +219,4 @@ public static class DebugHelper
         Warning,
         Error
     }
-    
-    #endregion
 }

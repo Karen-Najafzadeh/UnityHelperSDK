@@ -2,6 +2,7 @@ using UnityEngine;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Linq;
 using TMPro;
 using UnityEngine.Events;
 
@@ -52,12 +53,20 @@ public static class DialogueHelper
         // Use UI Helper to show dialogue UI if needed
         if (uiConfig != null)
         {
-            await UIHelper.ShowDialogueUI(uiConfig);
+            // Initialize UI components
+            if (uiConfig.DialogueText != null)
+            {
+                _currentNode.TextComponent = uiConfig.DialogueText;
+            }
+            if (uiConfig.NameText != null && !string.IsNullOrEmpty(_currentNode.CharacterName))
+            {
+                uiConfig.NameText.text = _currentNode.CharacterName;
+            }
         }
         
         await ProcessNode(rootNode);
     }
-    
+
     /// <summary>
     /// Process a single dialogue node
     /// </summary>
@@ -71,15 +80,22 @@ public static class DialogueHelper
         // Display character name if present
         if (!string.IsNullOrEmpty(node.CharacterName))
         {
-            await UIHelper.SetDialogueCharacterName(node.CharacterName);
             OnCharacterSpeak?.Invoke(node.CharacterName);
         }
         
         // Animate text display
-        await AnimateText(text, node.TextComponent, node.CharacterDelay ?? _defaultCharacterDelay);
+        if (node.TextComponent != null)
+        {
+            await AnimateText(text, node.TextComponent, node.CharacterDelay ?? _defaultCharacterDelay);
+        }
         
+        // Wait for input if no choices
+        if (node.Choices == null || node.Choices.Count == 0)
+        {
+            await WaitForInput();
+        }
         // Show choices if any
-        if (node.Choices != null && node.Choices.Count > 0)
+        else
         {
             var choice = await UIHelper.ShowDialogueChoices(node.Choices);
             _dialogueHistory.Push(node);
@@ -91,6 +107,22 @@ public static class DialogueHelper
         }
         
         OnDialogueNodeComplete?.Invoke(node);
+    }
+
+    /// <summary>
+    /// Wait for player input to continue
+    /// </summary>
+    private static async Task WaitForInput()
+    {
+        bool inputReceived = false;
+        while (!inputReceived)
+        {
+            if (Input.GetKeyDown(KeyCode.Space) || Input.GetMouseButtonDown(0))
+            {
+                inputReceived = true;
+            }
+            await Task.Yield();
+        }
     }
     
     /// <summary>
@@ -160,10 +192,65 @@ public static class DialogueHelper
         }
     }
     
+    /// <summary>
+    /// End the current dialogue sequence
+    /// </summary>
+    public static void EndDialogue()
+    {
+        _isDialogueActive = false;
+        _currentNode = null;
+        _dialogueHistory.Clear();
+    }
+
+    /// <summary>
+    /// Go back to the previous node if available
+    /// </summary>
+    public static async Task GoBack()
+    {
+        if (_dialogueHistory.Count > 0)
+        {
+            _currentNode = _dialogueHistory.Pop();
+            await ProcessCurrentNode();
+        }
+    }
+    
+    private static async Task ProcessCurrentNode()
+    {
+        if (_currentNode == null)
+        {
+            EndDialogue();
+            return;
+        }
+
+        OnDialogueNodeStart?.Invoke(_currentNode);
+        
+        // Display text with typing effect
+        if (_currentNode.Text != null)
+        {
+            OnCharacterSpeak?.Invoke(_currentNode.Text);
+            await TypeText(_currentNode.Text);
+        }
+
+        OnDialogueNodeComplete?.Invoke(_currentNode);
+    }
+    
     #endregion
     
     #region Helper Methods
     
+    private static async Task TypeText(string text)
+    {
+        for (int i = 0; i < text.Length; i++)
+        {
+            await Task.Delay((int)(IsPunctuation(text[i]) ? 
+                _defaultPunctuationDelay * 1000 : 
+                _defaultCharacterDelay * 1000));
+
+            if (_skipEnabled && Input.anyKeyDown)
+                break;
+        }
+    }
+
     private static bool IsPunctuation(char c)
     {
         return c == '.' || c == ',' || c == '!' || c == '?' || c == ';';

@@ -45,12 +45,12 @@ public class TutorialRepository : MonoBehaviour
     public class TutorialData
     {
         public string Id;
-        public string Category;
+        public string CategoryId;
+        public bool OnlyShowOnce;
         public int RequiredLevel;
-        public bool OnlyShowOnce = true;
+        public List<string> Dependencies;
+        public List<string> StartConditions;
         public List<TutorialStepData> Steps;
-        public List<string> Dependencies; // IDs of tutorials that must be completed first
-        public Dictionary<string, object> CustomData;
     }
 
     [Serializable]
@@ -58,10 +58,8 @@ public class TutorialRepository : MonoBehaviour
     {
         public string Id;
         public string DialogueKey;
-        public string TargetObjectPath;  // Scene path to target object
-        public List<string> RequiredConditions;
+        public List<string> Conditions;
         public string CompletionCondition;
-        public Dictionary<string, object> CustomData;
     }
 
     [Serializable]
@@ -70,18 +68,17 @@ public class TutorialRepository : MonoBehaviour
         public string Id;
         public string Name;
         public string Description;
-        public List<string> TutorialIds;
-        public int SortOrder;
+        public int Order;
     }
 
     #endregion
 
     #region Fields
 
-    private Dictionary<string, TutorialData> _tutorialDefinitions = new Dictionary<string, TutorialData>();
-    private Dictionary<string, TutorialCategoryData> _categories = new Dictionary<string, TutorialCategoryData>();
-    private HashSet<string> _completedTutorials = new HashSet<string>();
-    private Dictionary<string, TutorialHelper.TutorialSequence> _activeSequences = new Dictionary<string, TutorialHelper.TutorialSequence>();
+    private Dictionary<string, TutorialData> _tutorialDefinitions;
+    private Dictionary<string, TutorialCategoryData> _categories;
+    private Dictionary<string, TutorialHelper.TutorialSequence> _activeSequences;
+    private HashSet<string> _completedTutorials;
 
     // Events
     public event Action<string> OnTutorialRegistered;
@@ -92,8 +89,21 @@ public class TutorialRepository : MonoBehaviour
 
     #region Initialization
 
-    private async void Awake()
+    private void Awake()
     {
+        InitializeAsync().ContinueWith(task => {
+            if (task.Exception != null)
+                Debug.LogError($"Error initializing TutorialRepository: {task.Exception}");
+        });
+    }
+
+    private async Task InitializeAsync()
+    {
+        _tutorialDefinitions = new Dictionary<string, TutorialData>();
+        _categories = new Dictionary<string, TutorialCategoryData>();
+        _activeSequences = new Dictionary<string, TutorialHelper.TutorialSequence>();
+        _completedTutorials = new HashSet<string>();
+
         await LoadTutorialDefinitions();
         await LoadTutorialProgress();
     }
@@ -129,24 +139,34 @@ public class TutorialRepository : MonoBehaviour
         }
     }
 
-    private async Task LoadTutorialProgress()
+    private Task LoadTutorialProgress()
     {
-        try
+        var json = PlayerPrefs.GetString("CompletedTutorials", "");
+        if (!string.IsNullOrEmpty(json))
         {
-            var progressJson = PlayerPrefs.GetString("TutorialProgress");
-            if (!string.IsNullOrEmpty(progressJson))
+            try
             {
-                var progress = JsonHelper.Deserialize<HashSet<string>>(progressJson);
-                if (progress != null)
-                {
-                    _completedTutorials = progress;
-                }
+                var completed = JsonHelper.Deserialize<List<string>>(json);
+                _completedTutorials = new HashSet<string>(completed);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Error loading tutorial progress: {e.Message}");
             }
         }
-        catch (Exception e)
-        {
-            Debug.LogError($"Error loading tutorial progress: {e.Message}");
-        }
+        return Task.CompletedTask;
+    }
+
+    private Task<string> LoadTutorialJson()
+    {
+        var textAsset = Resources.Load<TextAsset>("Tutorials/tutorial_definitions");
+        return Task.FromResult(textAsset?.text ?? "");
+    }
+
+    private Task<string> LoadCategoryJson()
+    {
+        var textAsset = Resources.Load<TextAsset>("Tutorials/tutorial_categories");
+        return Task.FromResult(textAsset?.text ?? ""); 
     }
 
     #endregion
@@ -190,16 +210,15 @@ public class TutorialRepository : MonoBehaviour
     }
 
     /// <summary>
-    /// Create a TutorialSequence from TutorialData
+    /// Create a tutorial sequence from data
     /// </summary>
-    private void CreateTutorialSequence(TutorialData data)
+    protected virtual void CreateTutorialSequence(TutorialData data)
     {
         var sequence = new TutorialHelper.TutorialSequence
         {
             Id = data.Id,
-            Category = data.Category,
-            RequiredLevel = data.RequiredLevel,
             OnlyShowOnce = data.OnlyShowOnce,
+            RequiredLevel = data.RequiredLevel,
             Steps = new List<TutorialHelper.TutorialStep>()
         };
 
@@ -209,23 +228,63 @@ public class TutorialRepository : MonoBehaviour
             {
                 Id = stepData.Id,
                 DialogueKey = stepData.DialogueKey,
-                Target = !string.IsNullOrEmpty(stepData.TargetObjectPath) ? 
-                    GameObject.Find(stepData.TargetObjectPath) : null,
-                Conditions = CreateConditions(stepData.RequiredConditions),
+                Conditions = CreateConditions(stepData.Conditions),
                 CompletionCondition = CreateCondition(stepData.CompletionCondition)
             };
 
             sequence.Steps.Add(step);
         }
 
+        sequence.StartConditions = CreateConditions(data.StartConditions);
         _activeSequences[data.Id] = sequence;
         TutorialHelper.RegisterTutorial(sequence);
+        OnTutorialRegistered?.Invoke(data.Id);
+    }
+
+    /// <summary>
+    /// Create a single condition instance based on a condition ID
+    /// </summary>
+    protected virtual TutorialHelper.TutorialCondition CreateCondition(string conditionId)
+    {
+        if (string.IsNullOrEmpty(conditionId))
+            return null;
+
+        // Parse condition ID to determine type and parameters
+        var parts = conditionId.Split(':');
+        var type = parts[0].ToLower();
+
+        switch (type)
+        {
+            case "tutorial":
+                // Format: tutorial:tutorialId1,tutorialId2
+                var tutorials = parts[1].Split(',');
+                return new TutorialCompletionCondition(conditionId, tutorials);
+
+            case "level":
+                // Format: level:5
+                if (int.TryParse(parts[1], out int level))
+                {
+                    return new LevelCondition(conditionId, level);
+                }
+                break;
+
+            case "custom":
+                // Format: custom:conditionId
+                return new CustomTutorialCondition(parts[1]);
+
+            default:
+                // For backward compatibility or unknown types
+                return new CustomTutorialCondition(conditionId);
+        }
+
+        Debug.LogWarning($"Invalid condition format: {conditionId}");
+        return null;
     }
 
     /// <summary>
     /// Create condition instances from condition identifiers
     /// </summary>
-    private List<TutorialHelper.TutorialCondition> CreateConditions(List<string> conditionIds)
+    protected virtual List<TutorialHelper.TutorialCondition> CreateConditions(List<string> conditionIds)
     {
         if (conditionIds == null) return null;
 
@@ -241,25 +300,26 @@ public class TutorialRepository : MonoBehaviour
         return conditions;
     }
 
-    /// <summary>
-    /// Create a condition instance from a condition identifier
-    /// </summary>
-    private TutorialHelper.TutorialCondition CreateCondition(string conditionId)
-    {
-        if (string.IsNullOrEmpty(conditionId)) return null;
+    #endregion
 
-        // Example condition creation - expand based on your needs
-        switch (conditionId)
-        {
-            case "PlayerMoved":
-                return new PlayerMovedCondition();
-            case "ItemCollected":
-                return new ItemCollectedCondition();
-            // Add more conditions as needed
-            default:
-                Debug.LogWarning($"Unknown condition type: {conditionId}");
-                return null;
-        }
+    #region Tutorial Info
+
+    /// <summary>
+    /// Get all tutorials in a category
+    /// </summary>
+    public List<TutorialData> GetTutorialsByCategory(string categoryId)
+    {
+        return _tutorialDefinitions.Values
+            .Where(t => t.CategoryId == categoryId)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Get all available categories
+    /// </summary>
+    public List<TutorialCategoryData> GetCategories()
+    {
+        return _categories.Values.ToList();
     }
 
     #endregion
@@ -292,101 +352,97 @@ public class TutorialRepository : MonoBehaviour
     /// </summary>
     private void SaveProgress()
     {
-        try
-        {
-            var json = JsonHelper.Serialize(_completedTutorials);
-            PlayerPrefs.SetString("TutorialProgress", json);
-            PlayerPrefs.Save();
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"Error saving tutorial progress: {e.Message}");
-        }
+        var json = JsonHelper.Serialize(_completedTutorials.ToList());
+        PlayerPrefs.SetString("CompletedTutorials", json);
+        PlayerPrefs.Save();
     }
 
     #endregion
 
-    #region Category Management
+    #region Helper Classes
 
     /// <summary>
-    /// Get all tutorials in a category
+    /// Base implementation of a custom tutorial condition.
     /// </summary>
-    public List<TutorialData> GetTutorialsByCategory(string categoryId)
+    public class CustomTutorialCondition : TutorialHelper.TutorialCondition
     {
-        if (!_categories.TryGetValue(categoryId, out var category))
+        protected readonly string conditionId;
+        private readonly Func<bool> _checkCondition;
+
+        public CustomTutorialCondition(string conditionId, Func<bool> checkCondition = null)
         {
-            return new List<TutorialData>();
+            this.conditionId = conditionId;
+            _checkCondition = checkCondition;
         }
 
-        return category.TutorialIds
-            .Where(id => _tutorialDefinitions.ContainsKey(id))
-            .Select(id => _tutorialDefinitions[id])
-            .ToList();
+        public override bool IsMet()
+        {
+            if (_checkCondition != null)
+            {
+                return _checkCondition();
+            }
+
+            // Default implementation - override this in derived classes
+            // or provide a check delegate in constructor
+            return true;
+        }
+
+        public override string GetDescription()
+        {
+            return $"Custom condition: {conditionId}";
+        }
     }
 
     /// <summary>
-    /// Get all available categories
+    /// A condition that checks if the player has completed certain tutorials
     /// </summary>
-    public List<TutorialCategoryData> GetCategories()
+    public class TutorialCompletionCondition : CustomTutorialCondition
     {
-        return _categories.Values.OrderBy(c => c.SortOrder).ToList();
-    }
+        private readonly string[] _requiredTutorials;
 
-    #endregion
-
-    #region Helper Methods
-
-    private async Task<string> LoadTutorialJson()
-    {
-        var textAsset = Resources.Load<TextAsset>("Tutorials/tutorial_definitions");
-        return textAsset?.text;
-    }
-
-    private async Task<string> LoadCategoryJson()
-    {
-        var textAsset = Resources.Load<TextAsset>("Tutorials/tutorial_categories");
-        return textAsset?.text;
-    }
-
-    #endregion
-}
-
-#region Custom Conditions
-
-/// <summary>
-/// Example condition for checking if player has moved
-/// </summary>
-public class PlayerMovedCondition : TutorialHelper.TutorialCondition
-{
-    private Vector3 _initialPosition;
-    private bool _initialized;
-
-    public override bool IsMet()
-    {
-        var player = GameObject.FindGameObjectWithTag("Player");
-        if (player == null) return false;
-
-        if (!_initialized)
+        public TutorialCompletionCondition(string conditionId, params string[] requiredTutorials) 
+            : base(conditionId)
         {
-            _initialPosition = player.transform.position;
-            _initialized = true;
-            return false;
+            _requiredTutorials = requiredTutorials;
         }
 
-        return Vector3.Distance(_initialPosition, player.transform.position) > 0.1f;
-    }
-}
+        public override bool IsMet()
+        {
+            return _requiredTutorials == null || 
+                   _requiredTutorials.All(t => Instance.IsTutorialCompleted(t));
+        }
 
-/// <summary>
-/// Example condition for checking if an item was collected
-/// </summary>
-public class ItemCollectedCondition : TutorialHelper.TutorialCondition
-{
-    public override bool IsMet()
+        public override string GetDescription()
+        {
+            return $"Requires tutorials: {string.Join(", ", _requiredTutorials)}";
+        }
+    }
+
+    /// <summary>
+    /// A condition that checks if the player has reached a certain level
+    /// </summary>
+    public class LevelCondition : CustomTutorialCondition
     {
-        // Implement your item collection check logic here
-        return false;
-    }
-}
+        private readonly int _requiredLevel;
 
-#endregion
+        public LevelCondition(string conditionId, int requiredLevel) 
+            : base(conditionId)
+        {
+            _requiredLevel = requiredLevel;
+        }
+
+        public override bool IsMet()
+        {
+            // Implementation depends on your level system
+            int playerLevel = 1; // Get from your player system
+            return playerLevel >= _requiredLevel;
+        }
+
+        public override string GetDescription()
+        {
+            return $"Requires level: {_requiredLevel}";
+        }
+    }
+
+    #endregion
+}

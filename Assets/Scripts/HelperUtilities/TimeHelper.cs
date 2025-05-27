@@ -110,65 +110,67 @@ public static class TimeHelper
     #endregion
     
     #region Time Scale Control
-    
+
     /// <summary>
-    /// Set the game time scale
+    /// Set the global time scale
     /// </summary>
     public static void SetTimeScale(float scale)
     {
         _previousTimeScale = Time.timeScale;
         Time.timeScale = scale;
     }
-    
+
     /// <summary>
-    /// Pause the game
+    /// Restore the previous time scale
     /// </summary>
-    public static void PauseGame()
-    {
-        _previousTimeScale = Time.timeScale;
-        Time.timeScale = 0f;
-    }
-    
-    /// <summary>
-    /// Resume the game
-    /// </summary>
-    public static void ResumeGame()
+    public static void RestoreTimeScale()
     {
         Time.timeScale = _previousTimeScale;
     }
-    
+
     /// <summary>
-    /// Temporarily modify time scale and restore it after duration
+    /// Pause/unpause the game
     /// </summary>
-    public static async Task SlowMotion(float scale, float duration)
+    public static void SetPaused(bool paused)
     {
-        float originalScale = Time.timeScale;
-        SetTimeScale(scale);
-        
-        await Task.Delay((int)(duration * 1000));
-        
-        if (Math.Abs(Time.timeScale - scale) < 0.01f)
+        if (paused)
         {
-            SetTimeScale(originalScale);
+            _previousTimeScale = Time.timeScale;
+            Time.timeScale = 0f;
+        }
+        else
+        {
+            Time.timeScale = _previousTimeScale;
         }
     }
-    
+
     #endregion
     
-    #region Scheduling
-    
+    #region Scheduling System
+
     /// <summary>
-    /// Schedule an action to occur after a delay
+    /// Schedule an action to be executed after a delay
     /// </summary>
     public static void ScheduleAction(Action action, float delay, bool ignoreTimeScale = false)
     {
-        _scheduledActions.Add(new ScheduledAction(
-            action,
-            ignoreTimeScale ? Time.unscaledTime + delay : Time.time + delay,
-            ignoreTimeScale
-        ));
+        if (action == null)
+            return;
+
+        float executeTime = (ignoreTimeScale ? Time.unscaledTime : Time.time) + delay;
+        _scheduledActions.Add(new ScheduledAction(action, executeTime, ignoreTimeScale));
     }
-    
+
+    /// <summary>
+    /// Schedule an action to be executed at a specific time
+    /// </summary>
+    public static void ScheduleActionAt(Action action, float executeTime, bool ignoreTimeScale = false)
+    {
+        if (action == null)
+            return;
+
+        _scheduledActions.Add(new ScheduledAction(action, executeTime, ignoreTimeScale));
+    }
+
     /// <summary>
     /// Update scheduled actions (call this from Update)
     /// </summary>
@@ -186,7 +188,15 @@ public static class TimeHelper
             }
         }
     }
-    
+
+    /// <summary>
+    /// Clear all scheduled actions
+    /// </summary>
+    public static void ClearScheduledActions()
+    {
+        _scheduledActions.Clear();
+    }
+
     #endregion
     
     #region Helper Classes
@@ -231,12 +241,12 @@ public static class TimeHelper
             }
         }
     }
-    
+
     private class ScheduledAction
     {
-        public Action Action { get; private set; }
-        public float ExecuteTime { get; private set; }
-        public bool IgnoreTimeScale { get; private set; }
+        public Action Action { get; }
+        public float ExecuteTime { get; }
+        public bool IgnoreTimeScale { get; }
         
         public ScheduledAction(Action action, float executeTime, bool ignoreTimeScale)
         {
@@ -245,7 +255,7 @@ public static class TimeHelper
             IgnoreTimeScale = ignoreTimeScale;
         }
     }
-    
+
     #endregion
     
     #region Utility Methods

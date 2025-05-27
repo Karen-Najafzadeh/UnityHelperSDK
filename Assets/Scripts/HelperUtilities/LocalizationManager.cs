@@ -585,4 +585,52 @@ public static class LocalizationManager
         var str = Get(key, args);
         return System.Text.RegularExpressions.Regex.Replace(str, @"\s+", " ").Trim();
     }
+
+    /// <summary>
+    /// Get a localized string for a given key. Returns the key if no translation exists.
+    /// </summary>
+    public static string GetLocalizedText(string key)
+    {
+        if (string.IsNullOrEmpty(key)) return key;
+        
+        // Try current language
+        if (!string.IsNullOrEmpty(_currentLanguage) && 
+            _translations.TryGetValue(key, out string translation))
+        {
+            return translation;
+        }
+        
+        // Try fallback language
+        if (_fallbackLanguage != _currentLanguage)
+        {
+            var fallbackTranslations = LoadTranslations(_fallbackLanguage);
+            if (fallbackTranslations.TryGetValue(key, out translation))
+            {
+                return translation;
+            }
+        }
+        
+        // Return key as fallback
+        return key;
+    }
+
+    /// <summary>
+    /// Load translations for a specific language from Resources
+    /// </summary>
+    private static Dictionary<string, string> LoadTranslations(string languageCode)
+    {
+        var textAsset = Resources.Load<TextAsset>($"Localization/{languageCode}");
+        if (textAsset != null)
+        {
+            try
+            {
+                return JsonHelper.Deserialize<Dictionary<string, string>>(textAsset.text);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Error loading translations for {languageCode}: {e.Message}");
+            }
+        }
+        return new Dictionary<string, string>();
+    }
 }

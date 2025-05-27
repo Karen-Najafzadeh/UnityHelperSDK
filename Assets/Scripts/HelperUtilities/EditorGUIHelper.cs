@@ -311,19 +311,35 @@ public static class EditorGUIHelper
     /// <summary>
     /// Begin a horizontal group with specified spacing
     /// </summary>
-    public static void BeginHorizontalGroup(float spacing = DefaultSpacing)
+    public static void BeginHorizontalGroup(float spacing)
     {
         EditorGUILayout.BeginHorizontal();
         GUILayout.Space(spacing);
+    }
+
+    /// <summary>
+    /// Begin a horizontal group with default spacing
+    /// </summary>
+    public static void BeginHorizontalGroup()
+    {
+        BeginHorizontalGroup(DefaultSpacing);
     }
     
     /// <summary>
     /// End a horizontal group with specified spacing
     /// </summary>
-    public static void EndHorizontalGroup(float spacing = DefaultSpacing)
+    public static void EndHorizontalGroup(float spacing)
     {
         GUILayout.Space(spacing);
         EditorGUILayout.EndHorizontal();
+    }
+
+    /// <summary>
+    /// End a horizontal group with default spacing
+    /// </summary>
+    public static void EndHorizontalGroup()
+    {
+        EndHorizontalGroup(DefaultSpacing);
     }
     
     /// <summary>

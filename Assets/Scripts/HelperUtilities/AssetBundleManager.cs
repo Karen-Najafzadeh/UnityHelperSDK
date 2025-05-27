@@ -127,6 +127,14 @@ public static class AssetBundleManager
     // ------------------------------------------------------------------------
 
     /// <summary>
+    /// Gets the absolute file path for a bundle.
+    /// </summary>
+    public static string GetBundleFilePath(string bundleName)
+    {
+        return Path.Combine(BundleDirectory, bundleName);
+    }
+
+    /// <summary>
     /// Loads an asset of type T from a loaded bundle.
     /// </summary>
     public static T LoadAsset<T>(string bundleName, string assetName) where T : UnityEngine.Object

@@ -2,6 +2,7 @@ using UnityEngine;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Linq;
 
 /// <summary>
 /// A comprehensive particle system helper that handles particle effect management,

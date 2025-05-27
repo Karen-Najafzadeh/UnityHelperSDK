@@ -25,17 +25,14 @@ public static class DamagePopupHelper
     private static readonly Color NormalColor = Color.white;
     private static readonly Color HealColor = new Color(0.2f, 1f, 0.2f);
     private static readonly Color ElementalColors = new Color(0.2f, 0.6f, 1f);
-    
-    // Style settings
-    private static DamagePopupStyle CurrentStyle = DamagePopupStyle.Float;
-    
+        
     /// <summary>
     /// Initialize the damage popup system
     /// </summary>
     public static async Task Initialize()
     {
         var prefab = CreateDamagePopupPrefab();
-        await ObjectPoolHelper.InitializePoolAsync(POOL_KEY, prefab, new PoolSettings
+        await ObjectPoolHelper.InitializePoolAsync(POOL_KEY, prefab, new ObjectPoolHelper.PoolSettings
         {
             InitialSize = 20,
             MaxSize = 100,

@@ -4,6 +4,7 @@ using UnityEngine.Events;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Linq;
 using TMPro;
 using DG.Tweening;
 
@@ -27,17 +28,16 @@ public static class UIHelper
     private static Canvas _mainCanvas;
     private static readonly Dictionary<string, GameObject> _uiPrefabs = new Dictionary<string, GameObject>();
     private static readonly Dictionary<string, Queue<GameObject>> _uiPools = new Dictionary<string, Queue<GameObject>>();
-    private static readonly Stack<GameObject> _activePopups = new Stack<GameObject>();
+    private static Stack<GameObject> _activePopups = new Stack<GameObject>();
     
     // Toast notification settings
     private static readonly Vector2 ToastSize = new Vector2(400f, 80f);
     private static readonly float ToastDuration = 2f;
     private static readonly float ToastFadeTime = 0.3f;
-    
-    // Animation defaults
     private static readonly float DefaultAnimationDuration = 0.3f;
     private static readonly Ease DefaultEase = Ease.OutQuad;
-
+    private static readonly Vector2 ToastPosition = new Vector2(0f, 100f);
+    
     #region Initialization
 
     /// <summary>
@@ -47,6 +47,19 @@ public static class UIHelper
     {
         _mainCanvas = mainCanvas;
         InitializeCommonPrefabs();
+    }
+
+    public static void Initialize()
+    {
+        _mainCanvas = UnityEngine.Object.FindObjectOfType<Canvas>();
+        if (!_mainCanvas)
+        {
+            GameObject canvasObj = new GameObject("MainCanvas");
+            _mainCanvas = canvasObj.AddComponent<Canvas>();
+            _mainCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvasObj.AddComponent<CanvasScaler>();
+            canvasObj.AddComponent<GraphicRaycaster>();
+        }
     }
 
     private static void InitializeCommonPrefabs()
@@ -100,6 +113,34 @@ public static class UIHelper
         ReturnToPool("Toast", toast);
     }
 
+    public static async Task ShowToast(string message, float duration = 2f)
+    {
+        if (!_mainCanvas) Initialize();
+
+        GameObject toastObj = new GameObject("Toast");
+        toastObj.transform.SetParent(_mainCanvas.transform, false);
+
+        var text = toastObj.AddComponent<TextMeshProUGUI>();
+        text.text = message;
+        text.alignment = TextAlignmentOptions.Center;
+        text.color = new Color(1f, 1f, 1f, 0f);
+
+        var rect = toastObj.GetComponent<RectTransform>();
+        rect.sizeDelta = ToastSize;
+        rect.anchoredPosition = ToastPosition;
+
+        // Fade in
+        await text.DOFade(1f, ToastFadeTime).AsyncWaitForCompletion();
+        
+        // Wait
+        await Task.Delay((int)(duration * 1000));
+        
+        // Fade out
+        await text.DOFade(0f, ToastFadeTime).AsyncWaitForCompletion();
+        
+        UnityEngine.Object.Destroy(toastObj);
+    }
+
     #endregion
 
     #region Popup Management
@@ -136,6 +177,50 @@ public static class UIHelper
         ReturnToPool("Popup", popup);
 
         return result;
+    }
+
+    public static GameObject ShowPopup(GameObject popupPrefab)
+    {
+        if (!_mainCanvas) Initialize();
+
+        GameObject popup = UnityEngine.Object.Instantiate(popupPrefab, _mainCanvas.transform);
+        _activePopups.Push(popup);
+
+        // Animate in
+        var rect = popup.GetComponent<RectTransform>();
+        rect.localScale = Vector3.zero;
+        rect.DOScale(1f, DefaultAnimationDuration).SetEase(DefaultEase);
+
+        return popup;
+    }
+
+    public static async Task ClosePopup(GameObject popup = null)
+    {
+        if (_activePopups.Count == 0) return;
+
+        popup = popup ?? _activePopups.Peek();
+        
+        // Animate out
+        var rect = popup.GetComponent<RectTransform>();
+        await rect.DOScale(0f, DefaultAnimationDuration).SetEase(DefaultEase).AsyncWaitForCompletion();
+
+        var newStack = new Stack<GameObject>();
+        foreach (var p in _activePopups.Where(p => p != popup))
+        {
+            newStack.Push(p);
+        }
+        _activePopups = newStack;
+        
+        UnityEngine.Object.Destroy(popup);
+    }
+
+    public static void CloseAllPopups()
+    {
+        while (_activePopups.Count > 0)
+        {
+            var popup = _activePopups.Pop();
+            UnityEngine.Object.Destroy(popup);
+        }
     }
 
     private static async Task AnimatePopupIn(GameObject popup)
@@ -176,6 +261,27 @@ public static class UIHelper
         return spinner;
     }
 
+    private static GameObject _loadingIndicator;
+
+    public static void ShowLoadingIndicator()
+    {
+        if (!_mainCanvas) Initialize();
+        if (_loadingIndicator != null) return;
+
+        _loadingIndicator = new GameObject("LoadingIndicator");
+        _loadingIndicator.transform.SetParent(_mainCanvas.transform, false);
+        
+        var image = _loadingIndicator.AddComponent<Image>();
+        image.sprite = Resources.Load<Sprite>("LoadingSpinner");
+        
+        var rect = _loadingIndicator.GetComponent<RectTransform>();
+        rect.sizeDelta = new Vector2(100f, 100f);
+        
+        DOTween.To(() => rect.localRotation.eulerAngles.z, 
+            z => rect.localRotation = Quaternion.Euler(0f, 0f, z), 
+            360f, 1f).SetLoops(-1, LoopType.Incremental).SetEase(Ease.Linear);
+    }
+
     /// <summary>
     /// Hide the loading spinner
     /// </summary>
@@ -186,6 +292,105 @@ public static class UIHelper
             spinner.transform.DOKill();
             ReturnToPool("LoadingSpinner", spinner);
         }
+    }
+
+    public static void HideLoadingIndicator()
+    {
+        if (_loadingIndicator != null)
+        {
+            UnityEngine.Object.Destroy(_loadingIndicator);
+            _loadingIndicator = null;
+        }
+    }
+
+    #endregion
+
+    #region Loading Screen
+
+    private static GameObject _loadingScreen;
+    private static CanvasGroup _loadingScreenCanvasGroup;
+
+    /// <summary>
+    /// Show a full-screen loading screen with optional progress bar
+    /// </summary>
+    public static async Task ShowLoadingScreen()
+    {
+        if (!_mainCanvas) Initialize();
+        
+        if (_loadingScreen == null)
+        {
+            _loadingScreen = new GameObject("LoadingScreen");
+            _loadingScreen.transform.SetParent(_mainCanvas.transform, false);
+            
+            // Background
+            var rect = _loadingScreen.AddComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.sizeDelta = Vector2.zero;
+            
+            var bg = _loadingScreen.AddComponent<Image>();
+            bg.color = new Color(0, 0, 0, 0.9f);
+            
+            // Loading text
+            var loadingText = CreateLabel("Loading...", _loadingScreen.transform);
+            var textRect = loadingText.GetComponent<RectTransform>();
+            textRect.anchoredPosition = new Vector2(0, 0);
+            
+            // Spinner
+            ShowLoadingSpinner(_loadingScreen.transform);
+            
+            // Canvas group for fading
+            _loadingScreenCanvasGroup = _loadingScreen.AddComponent<CanvasGroup>();
+            _loadingScreenCanvasGroup.alpha = 0;
+        }
+
+        _loadingScreen.SetActive(true);
+        await _loadingScreenCanvasGroup.DOFade(1f, DefaultAnimationDuration)
+            .SetEase(DefaultEase)
+            .AsyncWaitForCompletion();
+    }
+
+    /// <summary>
+    /// Hide the loading screen with a fade out animation
+    /// </summary>
+    public static async Task HideLoadingScreen()
+    {
+        if (_loadingScreen != null && _loadingScreenCanvasGroup != null)
+        {
+            await _loadingScreenCanvasGroup.DOFade(0f, DefaultAnimationDuration)
+                .SetEase(DefaultEase)
+                .AsyncWaitForCompletion();
+            _loadingScreen.SetActive(false);
+        }
+    }
+
+    #endregion
+
+    #region Overlay    /// <summary>
+    /// Create a full-screen overlay with the specified color
+    /// </summary>
+    public static GameObject CreateOverlay(Color color)
+    {
+        if (!_mainCanvas) Initialize();
+
+        var overlay = new GameObject("Overlay");
+        overlay.transform.SetParent(_mainCanvas.transform, false);
+        
+        var rect = overlay.AddComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.sizeDelta = Vector2.zero;
+        
+        var image = overlay.AddComponent<Image>();
+        image.color = color;
+        
+        var canvasGroup = overlay.AddComponent<CanvasGroup>();
+        canvasGroup.alpha = 0;
+        
+        // Make sure it's on top of other UI elements
+        rect.SetAsLastSibling();
+        
+        return overlay;
     }
 
     #endregion
@@ -276,12 +481,40 @@ public static class UIHelper
         return CreateNewUIElement(prefabKey);
     }
 
+    public static GameObject GetFromPool(string prefabKey)
+    {
+        if (!_uiPools.ContainsKey(prefabKey))
+            _uiPools[prefabKey] = new Queue<GameObject>();
+
+        var pool = _uiPools[prefabKey];
+        
+        if (pool.Count > 0)
+            return pool.Dequeue();
+
+        if (!_uiPrefabs.ContainsKey(prefabKey))
+        {
+            Debug.LogError($"UI Prefab not found: {prefabKey}");
+            return null;
+        }
+
+        return UnityEngine.Object.Instantiate(_uiPrefabs[prefabKey], _mainCanvas.transform);
+    }
+
     private static GameObject CreateNewUIElement(string prefabKey)
     {
         var prefab = _uiPrefabs[prefabKey];
         var instance = GameObject.Instantiate(prefab, _mainCanvas.transform);
         instance.SetActive(false);
         return instance;
+    }
+
+    public static void ReturnToPool(GameObject obj, string prefabKey)
+    {
+        if (!_uiPools.ContainsKey(prefabKey))
+            _uiPools[prefabKey] = new Queue<GameObject>();
+
+        obj.SetActive(false);
+        _uiPools[prefabKey].Enqueue(obj);
     }
 
     private static void ReturnToPool(string prefabKey, GameObject element)
@@ -354,6 +587,70 @@ public static class UIHelper
             .transform.SetParent(go.transform, false);
 
         return go;
+    }
+
+    #endregion
+
+    #region Dialogue Choices
+
+    /// <summary>
+    /// Show dialogue choices and wait for user selection
+    /// </summary>
+    public static async Task<string> ShowDialogueChoices(Dictionary<string, DialogueHelper.DialogueNode> choices)
+    {
+        if (!_mainCanvas) Initialize();
+
+        var choiceContainer = new GameObject("ChoiceContainer").AddComponent<RectTransform>();
+        choiceContainer.SetParent(_mainCanvas.transform, false);
+        choiceContainer.anchorMin = new Vector2(0.5f, 0);
+        choiceContainer.anchorMax = new Vector2(0.5f, 0);
+        choiceContainer.pivot = new Vector2(0.5f, 0);
+        choiceContainer.anchoredPosition = new Vector2(0, 100);
+
+        var layout = choiceContainer.gameObject.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 10;
+        layout.padding = new RectOffset(10, 10, 10, 10);
+
+        var taskCompletionSource = new TaskCompletionSource<string>();
+
+        foreach (var choice in choices)
+        {
+            var button = CreateChoiceButton(choice.Key, choice.Value.Text);
+            button.transform.SetParent(choiceContainer.transform, false);
+            
+            button.onClick.AddListener(() => {
+                taskCompletionSource.SetResult(choice.Key);
+                UnityEngine.Object.Destroy(choiceContainer.gameObject);
+            });
+        }
+
+        return await taskCompletionSource.Task;
+    }
+
+    private static Button CreateChoiceButton(string choiceId, string text)
+    {
+        var buttonObj = new GameObject($"Choice_{choiceId}");
+        var button = buttonObj.AddComponent<Button>();
+        var rect = buttonObj.GetComponent<RectTransform>();
+        rect.sizeDelta = new Vector2(200, 40);
+
+        var textObj = new GameObject("Text");
+        var textComponent = textObj.AddComponent<TextMeshProUGUI>();
+        textComponent.text = text;
+        textComponent.color = Color.black;
+        textComponent.alignment = TextAlignmentOptions.Center;
+        
+        var textRect = textObj.GetComponent<RectTransform>();
+        textRect.SetParent(buttonObj.transform, false);
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.sizeDelta = Vector2.zero;
+
+        // Setup button visuals
+        var image = buttonObj.AddComponent<Image>();
+        image.color = Color.white;
+        
+        return button;
     }
 
     #endregion

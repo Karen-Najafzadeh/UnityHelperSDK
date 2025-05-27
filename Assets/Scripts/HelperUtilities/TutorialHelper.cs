@@ -209,26 +209,57 @@ public static class TutorialHelper
     /// </summary>
     private static async Task<GameObject> SetupStepVisuals(TutorialStep step)
     {
-        GameObject highlightObj = null;
+        if (step.Target == null) return null;
+
+        // Create highlight
+        var highlightObj = GameObject.Instantiate(_highlightPrefab);
+        highlightObj.transform.SetParent(_tutorialCanvas.transform, false);
         
-        if (step.Target != null)
+        // Position highlight
+        var targetRect = step.Target.GetComponent<RectTransform>();
+        if (targetRect != null)
         {
-            // Create highlight
-            highlightObj = GameObject.Instantiate(_highlightPrefab, _tutorialCanvas.transform);
-            var rectTransform = highlightObj.GetComponent<RectTransform>();
-            
-            // Position highlight over target
-            var targetRect = step.Target.GetComponent<RectTransform>();
-            rectTransform.position = targetRect.position;
-            rectTransform.sizeDelta = targetRect.sizeDelta + Vector2.one * 20f;
-            
-            // Animate in
-            if (_useAnimations)
+            // UI element
+            var highlightRect = highlightObj.GetComponent<RectTransform>();
+            highlightRect.position = targetRect.position;
+            highlightRect.sizeDelta = targetRect.sizeDelta;
+        }
+        else
+        {
+            // World space object
+            var renderer = step.Target.GetComponent<Renderer>();
+            if (renderer != null)
             {
-                var canvasGroup = highlightObj.GetComponent<CanvasGroup>();
-                canvasGroup.alpha = 0f;
-                await canvasGroup.DOFade(1f, _defaultAnimationDuration).AsyncWaitForCompletion();
+                highlightObj.transform.position = renderer.bounds.center;
+                highlightObj.transform.localScale = renderer.bounds.size;
             }
+        }
+        
+        // Setup highlight visuals
+        var highlightImage = highlightObj.GetComponent<UnityEngine.UI.Image>();
+        if (highlightImage != null)
+        {
+            highlightImage.color = _highlightColor;
+        }
+        
+        // Add arrow if needed
+        if (_arrowPrefab != null)
+        {
+            var arrowObj = GameObject.Instantiate(_arrowPrefab);
+            arrowObj.transform.SetParent(highlightObj.transform);
+            // Position arrow based on screen position
+            var screenPos = Camera.main.WorldToScreenPoint(step.Target.transform.position);
+            var arrowRect = arrowObj.GetComponent<RectTransform>();
+            arrowRect.anchoredPosition = screenPos;
+        }
+        
+        // Animate highlight
+        if (_useAnimations)
+        {
+            await highlightObj.transform.DOScale(Vector3.one * 1.1f, _defaultAnimationDuration)
+                .SetEase(DG.Tweening.Ease.OutBack)
+                .SetLoops(-1, DG.Tweening.LoopType.Yoyo)
+                .AsyncWaitForCompletion();
         }
         
         return highlightObj;
@@ -238,6 +269,9 @@ public static class TutorialHelper
     
     #region Progress Management
     
+    private static Dictionary<string, TutorialProgress> _tutorialProgress = 
+        new Dictionary<string, TutorialProgress>();
+
     /// <summary>
     /// Complete a tutorial and save progress
     /// </summary>
@@ -253,7 +287,7 @@ public static class TutorialHelper
         OnTutorialCompleted?.Invoke(tutorial.Id);
         DebugHelper.Log($"Completed tutorial: {tutorial.Id}");
     }
-    
+
     /// <summary>
     /// Save tutorial progress
     /// </summary>
@@ -262,28 +296,115 @@ public static class TutorialHelper
         var progress = new TutorialProgress
         {
             CompletedAt = DateTime.UtcNow,
-            StepsCompleted = _activeTutorial.Steps.Count
+            StepsCompleted = _activeTutorial?.Steps?.Count ?? 0,
+            CustomData = new Dictionary<string, object>()
         };
-        
-        await SaveSystemHelper.SaveGameAsync(
-            0,  // Use default slot
-            new Dictionary<string, object>
-            {
-                [$"Tutorials.{tutorialId}"] = progress
-            },
-            false  // Don't create backup for tutorial data
-        );
+
+        _tutorialProgress[tutorialId] = progress;
+
+        // Save to local storage
+        var json = JsonUtility.ToJson(new TutorialSaveData { Progress = _tutorialProgress });
+        PlayerPrefs.SetString("TutorialProgress", json);
+        PlayerPrefs.Save();
+
+        // Save to cloud if available
+        try
+        {
+            await FirebaseHelper.SetDocumentAsync("tutorials", "progress", _tutorialProgress);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"Failed to save tutorial progress to cloud: {ex.Message}");
+        }
     }
-    
+
     /// <summary>
     /// Load saved tutorial progress
     /// </summary>
     private static async Task LoadTutorialProgress()
     {
-        // Implementation depends on your save system
-        throw new NotImplementedException();
+        // Try loading from cloud first
+        try
+        {
+            var cloudProgress = await FirebaseHelper.GetDocumentAsync<Dictionary<string, TutorialProgress>>(
+                "tutorials", "progress");
+            if (cloudProgress != null)
+            {
+                _tutorialProgress = cloudProgress;
+                return;
+            }
+        }
+        catch
+        {
+            // Fall back to local storage
+        }
+
+        // Load from local storage
+        string json = PlayerPrefs.GetString("TutorialProgress", "");
+        if (!string.IsNullOrEmpty(json))
+        {
+            try
+            {
+                var data = JsonUtility.FromJson<TutorialSaveData>(json);
+                if (data?.Progress != null)
+                    _tutorialProgress = data.Progress;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Failed to load tutorial progress: {ex.Message}");
+            }
+        }
     }
-    
+
+    /// <summary>
+    /// Check if a tutorial has been completed
+    /// </summary>
+    public static bool IsTutorialCompleted(string tutorialId)
+    {
+        return _tutorialProgress.ContainsKey(tutorialId);
+    }
+
+    /// <summary>
+    /// Get tutorial completion time
+    /// </summary>
+    public static DateTime? GetTutorialCompletionTime(string tutorialId)
+    {
+        return _tutorialProgress.TryGetValue(tutorialId, out var progress) 
+            ? progress.CompletedAt 
+            : null;
+    }
+
+    /// <summary>
+    /// Reset progress for a specific tutorial
+    /// </summary>
+    public static async Task ResetTutorialProgress(string tutorialId)
+    {
+        if (_tutorialProgress.ContainsKey(tutorialId))
+        {
+            _tutorialProgress.Remove(tutorialId);
+            await SaveTutorialProgress(tutorialId);
+        }
+    }
+
+    /// <summary>
+    /// Reset all tutorial progress
+    /// </summary>
+    public static async Task ResetAllProgress()
+    {
+        _tutorialProgress.Clear();
+        PlayerPrefs.DeleteKey("TutorialProgress");
+        PlayerPrefs.Save();
+
+        try
+        {
+            await FirebaseHelper.DeleteDocumentAsync("tutorials", "progress");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"Failed to delete cloud tutorial progress: {ex.Message}");
+        }
+    }
+
     #endregion
     
     #region Helper Methods
@@ -313,15 +434,6 @@ public static class TutorialHelper
         // Check custom conditions
         return tutorial.StartConditions == null || 
                tutorial.StartConditions.All(c => c.IsMet());
-    }
-    
-    /// <summary>
-    /// Check if a tutorial has been completed
-    /// </summary>
-    public static bool IsTutorialCompleted(string tutorialId)
-    {
-        // Implementation depends on your save system
-        throw new NotImplementedException();
     }
     
     #endregion
@@ -361,11 +473,90 @@ public static class TutorialHelper
     /// </summary>
     public abstract class TutorialCondition
     {
+        /// <summary>
+        /// Check if the condition is met
+        /// </summary>
         public abstract bool IsMet();
+
+        /// <summary>
+        /// Get a descriptive message about the condition
+        /// </summary>
+        public virtual string GetDescription()
+        {
+            return "Tutorial condition";
+        }
+
+        /// <summary>
+        /// Called when the condition is first registered
+        /// </summary>
+        public virtual void Initialize() { }
+
+        /// <summary>
+        /// Called when the condition is no longer needed
+        /// </summary>
+        public virtual void Cleanup() { }
     }
-    
+
     /// <summary>
-    /// Stored progress for a tutorial
+    /// Delegate for checking if a tutorial condition is met
+    /// </summary>
+    public delegate bool TutorialConditionCheck();
+
+    /// <summary>
+    /// A custom tutorial condition that uses a delegate to check if it's met
+    /// </summary>
+    public class DelegateCondition : TutorialCondition
+    {
+        private readonly TutorialConditionCheck _check;
+        private readonly string _description;
+
+        public DelegateCondition(TutorialConditionCheck check, string description = null)
+        {
+            _check = check ?? throw new ArgumentNullException(nameof(check));
+            _description = description;
+        }
+
+        public override bool IsMet()
+        {
+            return _check();
+        }
+
+        public override string GetDescription()
+        {
+            return _description ?? base.GetDescription();
+        }
+    }
+
+    /// <summary>
+    /// A tutorial condition that combines multiple conditions with AND/OR logic
+    /// </summary>
+    public class CompositeCondition : TutorialCondition
+    {
+        private readonly TutorialCondition[] _conditions;
+        private readonly bool _requireAll;
+
+        public CompositeCondition(IEnumerable<TutorialCondition> conditions, bool requireAll = true)
+        {
+            _conditions = conditions?.ToArray() ?? throw new ArgumentNullException(nameof(conditions));
+            _requireAll = requireAll;
+        }
+
+        public override bool IsMet()
+        {
+            return _requireAll 
+                ? _conditions.All(c => c.IsMet())
+                : _conditions.Any(c => c.IsMet());
+        }
+
+        public override string GetDescription()
+        {
+            string logic = _requireAll ? "ALL" : "ANY";
+            return $"Requires {logic} of: {string.Join(", ", _conditions.Select(c => c.GetDescription()))}";
+        }
+    }
+
+    /// <summary>
+    /// Represents tutorial progress data for saving/loading
     /// </summary>
     private class TutorialProgress
     {
@@ -373,6 +564,12 @@ public static class TutorialHelper
         public int StepsCompleted { get; set; }
         public Dictionary<string, object> CustomData { get; set; }
     }
-    
+
+    [Serializable]
+    private class TutorialSaveData
+    {
+        public Dictionary<string, TutorialProgress> Progress;
+    }
+
     #endregion
 }

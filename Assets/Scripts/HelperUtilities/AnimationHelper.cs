@@ -5,6 +5,201 @@ using System.Collections.Generic;
 using System.Linq;
 
 /// <summary>
+/// Helper component for managing animation events and coroutines
+/// </summary>
+internal class AnimationEventHelper : MonoBehaviour
+{
+    private void OnDestroy()
+    {
+        StopAllCoroutines();
+    }
+}
+
+/// <summary>
+/// Robust animation management system with runtime modifications,
+/// proper state tracking, and error handling
+/// </summary>
+public static class AnimationHelper
+{
+    private static readonly Dictionary<Animator, Dictionary<string, float>> _storedSpeeds = 
+        new Dictionary<Animator, Dictionary<string, float>>();
+    
+    #region Animation Control
+    
+    /// <summary>
+    /// Play an animation with error checking
+    /// </summary>
+    public static bool PlayAnimation(Animator animator, string stateName, int layer = 0)
+    {
+        if (!animator)
+        {
+            Debug.LogError("Animator is null");
+            return false;
+        }
+
+        try
+        {
+            animator.Play(stateName, layer);
+            return true;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to play animation {stateName}: {e.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Smoothly crossfade between animations
+    /// </summary>
+    public static bool CrossFade(Animator animator, string stateName, float transitionDuration, int layer = 0)
+    {
+        if (!animator)
+        {
+            Debug.LogError("Animator is null");
+            return false;
+        }
+
+        try
+        {
+            animator.CrossFade(stateName, transitionDuration, layer);
+            return true;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to crossfade to animation {stateName}: {e.Message}");
+            return false;
+        }
+    }
+    
+    #endregion
+    
+    #region Runtime Modifications
+    
+    /// <summary>
+    /// Set the speed of a specific parameter
+    /// </summary>
+    public static void SetParameterSpeed(Animator animator, string parameterName, float speed)
+    {
+        if (!animator) return;
+
+        if (!_storedSpeeds.ContainsKey(animator))
+            _storedSpeeds[animator] = new Dictionary<string, float>();
+
+        _storedSpeeds[animator][parameterName] = animator.GetFloat(parameterName);
+        animator.SetFloat(parameterName, speed);
+    }
+
+    /// <summary>
+    /// Restore the original speed of a parameter
+    /// </summary>
+    public static void RestoreParameterSpeed(Animator animator, string parameterName)
+    {
+        if (!animator || !_storedSpeeds.ContainsKey(animator) || 
+            !_storedSpeeds[animator].ContainsKey(parameterName)) 
+            return;
+
+        animator.SetFloat(parameterName, _storedSpeeds[animator][parameterName]);
+        _storedSpeeds[animator].Remove(parameterName);
+    }
+    
+    #endregion
+    
+    #region State Management
+    
+    /// <summary>
+    /// Check if an animation state exists
+    /// </summary>
+    public static bool HasState(Animator animator, string stateName, int layer = 0)
+    {
+        if (!animator) return false;
+
+        try
+        {
+            var controller = animator.runtimeAnimatorController as UnityEngine.RuntimeAnimatorController;
+            if (!controller) return false;
+
+            return Array.Exists(controller.animationClips, clip => clip.name == stateName);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Get the length of an animation clip
+    /// </summary>
+    public static float GetClipLength(Animator animator, string clipName)
+    {
+        if (!animator) return 0f;
+
+        var controller = animator.runtimeAnimatorController as UnityEngine.RuntimeAnimatorController;
+        if (!controller) return 0f;
+
+        var clip = Array.Find(controller.animationClips, c => c.name == clipName);
+        return clip ? clip.length : 0f;
+    }
+    
+    #endregion
+    
+    #region Event Handling
+    
+    /// <summary>
+    /// Add a callback when an animation reaches a specific normalized time
+    /// </summary>
+    public static void AddAnimationCallback(
+        Animator animator, 
+        string stateName, 
+        float normalizedTime, 
+        Action callback)
+    {
+        if (!animator) return;
+
+        IEnumerator WaitForAnimationTime()
+        {
+            while (true)
+            {
+                var stateInfo = animator.GetCurrentAnimatorStateInfo(0);
+                if (stateInfo.IsName(stateName) && stateInfo.normalizedTime >= normalizedTime)
+                {
+                    callback?.Invoke();
+                    yield break;
+                }
+                yield return null;
+            }
+        }
+
+        var helper = animator.gameObject.GetComponent<AnimationEventHelper>() ?? 
+            animator.gameObject.AddComponent<AnimationEventHelper>();
+        helper.StartCoroutine(WaitForAnimationTime());
+    }
+    
+    #endregion
+    
+    #region Cleanup
+    
+    /// <summary>
+    /// Clear stored speeds for an animator
+    /// </summary>
+    public static void ClearStoredSpeeds(Animator animator)
+    {
+        if (_storedSpeeds.ContainsKey(animator))
+            _storedSpeeds.Remove(animator);
+    }
+
+    /// <summary>
+    /// Clear all stored speeds
+    /// </summary>
+    public static void ClearAllStoredSpeeds()
+    {
+        _storedSpeeds.Clear();
+    }
+    
+    #endregion
+}
+
+/// <summary>
 /// Robust animation management system with runtime modifications,
 /// proper state tracking, and error handling
 /// </summary>
@@ -21,7 +216,6 @@ public class AnimationManager : MonoBehaviour
                 var go = new GameObject("[AnimationManager]");
                 _instance = go.AddComponent<AnimationManager>();
                 DontDestroyOnLoad(go);
-                _instance.Initialize();
             }
             return _instance;
         }
@@ -756,103 +950,103 @@ public class AnimationManager : MonoBehaviour
     /// <summary>
     /// Stop recording and save animation data
     /// </summary>
-    public void StopRecording(Animator animator, string saveKey)
-    {
-        if (!ValidateAnimator(animator)) return;
+    // public void StopRecording(Animator animator, string saveKey)
+    // {
+    //     if (!ValidateAnimator(animator)) return;
         
-        var state = GetAnimatorState(animator);
-        state.IsRecording = false;
+    //     var state = GetAnimatorState(animator);
+    //     state.IsRecording = false;
         
-        // Save recorded animation using JsonHelper
-        var recordData = state.RecordedFrames.ToList();
-        JsonHelper.Serialize(recordData);
+    //     // Save recorded animation using JsonHelper
+    //     var recordData = state.RecordedFrames.ToList();
+    //     JsonHelper.Serialize(recordData);
         
-        // Optional: Save to disk or cloud
-        SaveRecordedAnimation(saveKey, recordData);
-    }
+    //     // Optional: Save to disk or cloud
+    //     SaveRecordedAnimation(saveKey, recordData);
+    // }
 
     /// <summary>
     /// Play back a recorded animation
     /// </summary>
-    public void PlayRecordedAnimation(
-        Animator animator,
-        string saveKey,
-        bool loop = false)
-    {
-        if (!ValidateAnimator(animator)) return;
+    // public void PlayRecordedAnimation(
+    //     Animator animator,
+    //     string saveKey,
+    //     bool loop = false)
+    // {
+    //     if (!ValidateAnimator(animator)) return;
         
-        StartCoroutine(PlaybackRoutine(animator, saveKey, loop));
-    }
+    //     StartCoroutine(PlaybackRoutine(animator, saveKey, loop));
+    // }
 
-    private IEnumerator PlaybackRoutine(
-        Animator animator,
-        string saveKey,
-        bool loop)
-    {
-        var recordData = LoadRecordedAnimation(saveKey);
-        if (recordData == null || recordData.Count == 0)
-        {
-            Debug.LogError($"No recorded animation found for key: {saveKey}");
-            yield break;
-        }
+    // private IEnumerator PlaybackRoutine(
+    //     Animator animator,
+    //     string saveKey,
+    //     bool loop)
+    // {
+    //     var recordData = LoadRecordedAnimation(saveKey);
+    //     if (recordData == null || recordData.Count == 0)
+    //     {
+    //         Debug.LogError($"No recorded animation found for key: {saveKey}");
+    //         yield break;
+    //     }
 
-        int frameIndex = 0;
-        float startTime = Time.time;
+    //     int frameIndex = 0;
+    //     float startTime = Time.time;
 
-        while (true)
-        {
-            if (frameIndex >= recordData.Count)
-            {
-                if (loop)
-                {
-                    frameIndex = 0;
-                    startTime = Time.time;
-                }
-                else
-                {
-                    break;
-                }
-            }
+    //     while (true)
+    //     {
+    //         if (frameIndex >= recordData.Count)
+    //         {
+    //             if (loop)
+    //             {
+    //                 frameIndex = 0;
+    //                 startTime = Time.time;
+    //             }
+    //             else
+    //             {
+    //                 break;
+    //             }
+    //         }
 
-            var frame = recordData[frameIndex];
+    //         var frame = recordData[frameIndex];
             
-            // Apply frame data
-            foreach (var param in frame.Parameters)
-            {
-                animator.SetFloat(param.Key, param.Value);
-            }
+    //         // Apply frame data
+    //         foreach (var param in frame.Parameters)
+    //         {
+    //             animator.SetFloat(param.Key, param.Value);
+    //         }
             
-            animator.transform.position = frame.Position;
-            animator.transform.rotation = frame.Rotation;
+    //         animator.transform.position = frame.Position;
+    //         animator.transform.rotation = frame.Rotation;
             
-            // Apply IK data
-            if (frame.IKData != null)
-            {
-                foreach (var ikData in frame.IKData)
-                {
-                    animator.SetIKPosition(ikData.Key, ikData.Value.Position);
-                    animator.SetIKRotation(ikData.Key, ikData.Value.Rotation);
-                    animator.SetIKPositionWeight(ikData.Key, ikData.Value.PositionWeight);
-                    animator.SetIKRotationWeight(ikData.Key, ikData.Value.RotationWeight);
-                }
-            }
+    //         // Apply IK data
+    //         if (frame.IKData != null)
+    //         {
+    //             foreach (var ikData in frame.IKData)
+    //             {
+    //                 animator.SetIKPosition(ikData.Key, ikData.Value.Position);
+    //                 animator.SetIKRotation(ikData.Key, ikData.Value.Rotation);
+    //                 animator.SetIKPositionWeight(ikData.Key, ikData.Value.PositionWeight);
+    //                 animator.SetIKRotationWeight(ikData.Key, ikData.Value.RotationWeight);
+    //             }
+    //         }
 
-            frameIndex++;
-            yield return null;
-        }
-    }
+    //         frameIndex++;
+    //         yield return null;
+    //     }
+    // }
 
-    private void SaveRecordedAnimation(string key, List<AnimationRecordFrame> data)
-    {
-        PlayerPrefs.SetString($"RecordedAnim_{key}", JsonHelper.Serialize(data));
-    }
+    // private void SaveRecordedAnimation(string key, List<AnimationRecordFrame> data)
+    // {
+    //     PlayerPrefs.SetString($"RecordedAnim_{key}", JsonHelper.Serialize(data));
+    // }
 
-    private List<AnimationRecordFrame> LoadRecordedAnimation(string key)
-    {
-        string json = PlayerPrefs.GetString($"RecordedAnim_{key}");
-        return string.IsNullOrEmpty(json) ? null : 
-            JsonHelper.Deserialize<List<AnimationRecordFrame>>(json);
-    }
+    // private List<AnimationRecordFrame> LoadRecordedAnimation(string key)
+    // {
+    //     string json = PlayerPrefs.GetString($"RecordedAnim_{key}");
+    //     return string.IsNullOrEmpty(json) ? null : 
+    //         JsonHelper.Deserialize<List<AnimationRecordFrame>>(json);
+    // }
 
     #endregion
 
@@ -899,7 +1093,7 @@ public class AnimationManager : MonoBehaviour
         if (!ValidateAnimator(animator)) return;
         
         animator.cullingMode = enableCulling ? 
-            AnimatorCullingMode.BasedOnRenderers : 
+            AnimatorCullingMode.CullUpdateTransforms : 
             AnimatorCullingMode.AlwaysAnimate;
             
         var renderer = animator.GetComponent<Renderer>();
@@ -912,62 +1106,62 @@ public class AnimationManager : MonoBehaviour
     /// <summary>
     /// Optimize animator for specific use case
     /// </summary>
-    public void OptimizeAnimator(
-        Animator animator,
-        bool disableRootMotion = true,
-        bool useFixedUpdate = false,
-        bool enableCulling = true)
-    {
-        if (!ValidateAnimator(animator)) return;
+    // public void OptimizeAnimator(
+    //     Animator animator,
+    //     bool disableRootMotion = true,
+    //     bool useFixedUpdate = false,
+    //     bool enableCulling = true)
+    // {
+    //     if (!ValidateAnimator(animator)) return;
         
-        animator.applyRootMotion = !disableRootMotion;
-        animator.updateMode = useFixedUpdate ? 
-            AnimatorUpdateMode.Fixed : 
-            AnimatorUpdateMode.Normal;
+    //     animator.applyRootMotion = !disableRootMotion;
+    //     animator.updateMode = useFixedUpdate ? 
+    //         AnimatorUpdateMode.Fixed : 
+    //         AnimatorUpdateMode.Normal;
         
-        SetCullingMode(animator, enableCulling);
+    //     SetCullingMode(animator, enableCulling);
         
-        // Disable unused components
-        var rigidbody = animator.GetComponent<Rigidbody>();
-        if (rigidbody && disableRootMotion)
-        {
-            rigidbody.isKinematic = true;
-        }
-    }
+    //     // Disable unused components
+    //     var rigidbody = animator.GetComponent<Rigidbody>();
+    //     if (rigidbody && disableRootMotion)
+    //     {
+    //         rigidbody.isKinematic = true;
+    //     }
+    // }
 
     /// <summary>
     /// Create a simplified version of an animation for LOD purposes
     /// </summary>
-    public AnimationClip CreateSimplifiedAnimation(
-        AnimationClip source,
-        float keyframeReduction = 0.5f)
-    {
-        var simplified = new AnimationClip();
-        simplified.name = $"{source.name}_Simplified";
+    // public AnimationClip CreateSimplifiedAnimation(
+    //     AnimationClip source,
+    //     float keyframeReduction = 0.5f)
+    // {
+    //     var simplified = new AnimationClip();
+    //     simplified.name = $"{source.name}_Simplified";
         
-        var curves = AnimationUtility.GetCurveBindings(source);
-        foreach (var binding in curves)
-        {
-            var curve = AnimationUtility.GetEditorCurve(source, binding);
-            var keys = curve.keys;
+    //     var curves = AnimationUtility.GetCurveBindings(source);
+    //     foreach (var binding in curves)
+    //     {
+    //         var curve = AnimationUtility.GetEditorCurve(source, binding);
+    //         var keys = curve.keys;
             
-            // Reduce keyframes
-            int newKeyCount = Mathf.Max(2, Mathf.FloorToInt(keys.Length * keyframeReduction));
-            var newKeys = new Keyframe[newKeyCount];
+    //         // Reduce keyframes
+    //         int newKeyCount = Mathf.Max(2, Mathf.FloorToInt(keys.Length * keyframeReduction));
+    //         var newKeys = new Keyframe[newKeyCount];
             
-            for (int i = 0; i < newKeyCount; i++)
-            {
-                float t = i / (float)(newKeyCount - 1);
-                int originalIndex = Mathf.FloorToInt(t * (keys.Length - 1));
-                newKeys[i] = keys[originalIndex];
-            }
+    //         for (int i = 0; i < newKeyCount; i++)
+    //         {
+    //             float t = i / (float)(newKeyCount - 1);
+    //             int originalIndex = Mathf.FloorToInt(t * (keys.Length - 1));
+    //             newKeys[i] = keys[originalIndex];
+    //         }
             
-            var newCurve = new AnimationCurve(newKeys);
-            AnimationUtility.SetEditorCurve(simplified, binding, newCurve);
-        }
+    //         var newCurve = new AnimationCurve(newKeys);
+    //         AnimationUtility.SetEditorCurve(simplified, binding, newCurve);
+    //     }
         
-        return simplified;
-    }
+    //     return simplified;
+    // }
     
     #endregion
 }

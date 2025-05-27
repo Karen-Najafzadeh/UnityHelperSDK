@@ -75,12 +75,12 @@ public static class InputHelper
             
             switch (touch.phase)
             {
-                case TouchPhase.Began:
+                case UnityEngine.TouchPhase.Began:
                     _touchStartPos = touch.position;
                     _touchStartTime = Time.time;
                     break;
                     
-                case TouchPhase.Ended:
+                case UnityEngine.TouchPhase.Ended:
                     float duration = Time.time - _touchStartTime;
                     Vector2 delta = touch.position - _touchStartPos;
                     
@@ -113,7 +113,7 @@ public static class InputHelper
         {
             Touch touch = Input.GetTouch(0);
             
-            if (touch.phase == TouchPhase.Ended)
+            if (touch.phase == UnityEngine.TouchPhase.Ended)
             {
                 float duration = Time.time - _touchStartTime;
                 if (duration < TapThreshold)

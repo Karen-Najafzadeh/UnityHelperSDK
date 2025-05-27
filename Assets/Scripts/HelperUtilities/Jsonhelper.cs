@@ -130,6 +130,14 @@ public static class JsonHelper
         public static string PrettyPrint(string json) => JToken.Parse(json).ToString(Formatting.Indented);
         public static string Minify(string json)     => JToken.Parse(json).ToString(Formatting.None);
 
+        /// <summary>Deserialize JSON string to type T.</summary>
+        public static T Deserialize<T>(string json)
+        {
+            if (string.IsNullOrEmpty(json))
+                return default;
+            return JsonConvert.DeserializeObject<T>(json);
+        }
+
         //--------------------------------------------------------------------------------
         // Schema Validation
         //--------------------------------------------------------------------------------

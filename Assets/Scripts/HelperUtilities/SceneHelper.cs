@@ -3,6 +3,7 @@ using UnityEngine.SceneManagement;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using DG.Tweening;
 
 /// <summary>
 /// A comprehensive scene management helper that handles scene loading, transitions,
@@ -65,7 +66,11 @@ public static class SceneHelper
         if (_activeScenes.Contains(sceneName))
         {
             SaveSceneState(sceneName);
-            await SceneManager.UnloadSceneAsync(sceneName);
+            var unloadOperation = SceneManager.UnloadSceneAsync(sceneName);
+            while (!unloadOperation.isDone)
+            {
+                await Task.Yield();
+            }
             _activeScenes.Remove(sceneName);
         }
     }
@@ -137,7 +142,7 @@ public static class SceneHelper
         var fadeColor = color ?? _defaultFadeColor;
         
         // Create fade overlay using UIHelper
-        var overlay = await UIHelper.CreateOverlay(fadeColor);
+        var overlay = UIHelper.CreateOverlay(fadeColor);
         
         // Fade in
         await overlay.GetComponent<CanvasGroup>().DOFade(1f, duration / 2).AsyncWaitForCompletion();

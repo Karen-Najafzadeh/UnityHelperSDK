@@ -59,7 +59,7 @@ public static class NavigationHelper
         while (!navAgent.pathStatus.Equals(NavMeshPathStatus.PathComplete) || 
                navAgent.remainingDistance > navAgent.stoppingDistance)
         {
-            float progress = 1f - (navAgent.remainingDistance / navAgent.path.length);
+            float progress = 1f - (navAgent.remainingDistance / GetPathLength(navAgent.path));
             onProgress?.Invoke(progress);
             await Task.Yield();
         }
@@ -68,93 +68,86 @@ public static class NavigationHelper
     #endregion
 
     #region Spatial Queries
-
+    
     /// <summary>
     /// Find nearest point on NavMesh
     /// </summary>
-    public static Vector3 GetNearestNavigablePoint(Vector3 point, float maxDistance = 100f)
+    public static Vector3 GetNearestPoint(Vector3 position)
     {
-        NavMeshHit hit;
-        if (NavMesh.SamplePosition(point, out hit, maxDistance, NavMesh.AllAreas))
-        {
+        if (NavMesh.SamplePosition(position, out var hit, 100f, NavMesh.AllAreas))
             return hit.position;
-        }
-        return point;
+        return position;
     }
 
     /// <summary>
-    /// Check if point is on NavMesh
+    /// Check if a point is on the NavMesh
     /// </summary>
-    public static bool IsPointNavigable(Vector3 point)
+    public static bool IsOnNavMesh(Vector3 position, float tolerance = 0.1f)
     {
-        NavMeshHit hit;
-        return NavMesh.SamplePosition(point, out hit, 0.1f, NavMesh.AllAreas);
+        if (NavMesh.SamplePosition(position, out var hit, tolerance, NavMesh.AllAreas))
+            return true;
+        return false;
     }
 
     /// <summary>
-    /// Find random point in radius on NavMesh
+    /// Find all NavMesh areas within a radius
     /// </summary>
-    public static Vector3 GetRandomNavigablePoint(Vector3 center, float radius)
+    public static NavMeshHit[] FindAreasInRadius(Vector3 center, float radius)
     {
-        for (int i = 0; i < 30; i++)  // Try 30 times
+        var hits = new List<NavMeshHit>();
+        const int SampleCount = 8;
+        
+        for (int i = 0; i < SampleCount; i++)
         {
-            Vector3 randomPoint = center + UnityEngine.Random.insideUnitSphere * radius;
-            NavMeshHit hit;
-            if (NavMesh.SamplePosition(randomPoint, out hit, radius, NavMesh.AllAreas))
-            {
-                return hit.position;
-            }
+            float angle = i * (2 * Mathf.PI / SampleCount);
+            Vector3 direction = new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle));
+            Vector3 point = center + direction * radius;
+            
+            if (NavMesh.SamplePosition(point, out var hit, radius, NavMesh.AllAreas))
+                hits.Add(hit);
         }
-        return center;  // Fallback to center if no point found
+        
+        return hits.ToArray();
     }
 
     #endregion
 
-    #region Path Visualization
+    #region Dynamic Obstacles
 
     /// <summary>
-    /// Draw the current path in the scene view
-    /// </summary>
-    public static void VisualizePath(NavMeshPath path)
-    {
-        if (!_showDebugPath || path == null) return;
-
-        for (int i = 0; i < path.corners.Length - 1; i++)
-        {
-            Debug.DrawLine(path.corners[i], path.corners[i + 1], _pathColor, _pathUpdateInterval);
-        }
-    }
-
-    #endregion
-
-    #region NavMesh Modification
-
-    /// <summary>
-    /// Add a new obstacle to the NavMesh at runtime
+    /// Add a dynamic obstacle to the NavMesh
     /// </summary>
     public static NavMeshObstacle AddDynamicObstacle(GameObject obj, Vector3 size)
     {
-        var obstacle = obj.GetComponent<NavMeshObstacle>();
-        if (obstacle == null)
-        {
-            obstacle = obj.AddComponent<NavMeshObstacle>();
-        }
-
-        obstacle.size = size;
+        var obstacle = obj.AddComponent<NavMeshObstacle>();
         obstacle.carving = true;
+        obstacle.size = size;
         return obstacle;
     }
 
     /// <summary>
+    /// Enable/disable NavMesh carving for an obstacle
+    /// </summary>
+    public static void SetObstacleCarving(NavMeshObstacle obstacle, bool enabled)
+    {
+        if (obstacle != null)
+        {
+            obstacle.carving = enabled;
+            if (enabled)
+                obstacle.carveOnlyStationary = false;
+        }
+    }    /// <summary>
     /// Update NavMesh to include new area
     /// </summary>
     public static void UpdateNavMeshArea(Bounds bounds)
     {
-        NavMeshData data = NavMesh.AddNavMeshData(new NavMeshData());
+        var data = new NavMeshData();
+        var sources = new List<NavMeshBuildSource>();
+        var instance = NavMesh.AddNavMeshData(data);
         NavMeshBuilder.UpdateNavMeshData(
             data,
             NavMesh.GetSettingsByID(0),
-            new NavMeshBuildSource[] { },
+            sources,
             bounds
         );
     }
@@ -168,23 +161,35 @@ public static class NavigationHelper
     /// </summary>
     public static Vector3[] GetPathCorners(NavMeshPath path)
     {
-        if (path == null) return new Vector3[0];
+        if (path == null)
+            return new Vector3[0];
         return path.corners;
     }
 
     /// <summary>
     /// Calculate total path length
     /// </summary>
-    public static float CalculatePathLength(NavMeshPath path)
+    public static float GetPathLength(NavMeshPath path)
     {
-        if (path == null || path.corners.Length < 2) return 0f;
+        if (path == null || path.corners.Length < 2)
+            return 0f;
 
         float length = 0f;
         for (int i = 0; i < path.corners.Length - 1; i++)
-        {
             length += Vector3.Distance(path.corners[i], path.corners[i + 1]);
-        }
         return length;
+    }
+
+    /// <summary>
+    /// Draw the current path in the scene view
+    /// </summary>
+    public static void VisualizePath(NavMeshPath path)
+    {
+        if (!_showDebugPath || path == null)
+            return;
+
+        for (int i = 0; i < path.corners.Length - 1; i++)
+            Debug.DrawLine(path.corners[i], path.corners[i + 1], _pathColor, _pathUpdateInterval);
     }
 
     #endregion
