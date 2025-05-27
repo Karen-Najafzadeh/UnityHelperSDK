@@ -10,6 +10,7 @@ namespace UnityHelperSDK.Editor
 {
     /// <summary>
     /// A custom TreeView implementation for displaying and managing tutorials.
+    /// Supports both runtime and editor data formats.
     /// </summary>
     public class TutorialTreeView : VisualElement
     {
@@ -106,7 +107,7 @@ namespace UnityHelperSDK.Editor
                                 id++,
                                 new TutorialItemData
                                 {
-                                    displayName = tutorial.Id, // Using Id since there is no Title property
+                                    displayName = tutorial.Title ?? tutorial.Id,
                                     categoryId = category.Id,
                                     tutorialId = tutorial.Id
                                 }
