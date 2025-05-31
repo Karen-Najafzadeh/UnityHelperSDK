@@ -7,39 +7,65 @@ using System.Linq;
 /// <summary>
 /// Helper component for managing animation events and coroutines
 /// </summary>
-internal class AnimationEventHelper : MonoBehaviour
+public class AnimationEventHelper : MonoBehaviour
 {
+    // Delegate for animation events
+    public delegate void AnimationEventCallback(string eventName);
+    public event AnimationEventCallback OnAnimationEvent;
+
     private void OnDestroy()
     {
         StopAllCoroutines();
+    }
+
+    // Called by animation events
+    public void TriggerAnimationEvent(string eventName)
+    {
+        OnAnimationEvent?.Invoke(eventName);
     }
 }
 
 /// <summary>
 /// Robust animation management system with runtime modifications,
-/// proper state tracking, and error handling
+/// proper state tracking, and error handling.
+/// Features:
+/// - Safe animation playback with error checking
+/// - Animation speed control and state management
+/// - Animation event handling and callbacks
+/// - Runtime animation modifications
+/// - Cross-fade and transition support
+/// - Animation state queries and validation
+/// - Parameter management
+/// - Animation clip utilities
 /// </summary>
 public static class AnimationHelper
 {
     private static readonly Dictionary<Animator, Dictionary<string, float>> _storedSpeeds = 
         new Dictionary<Animator, Dictionary<string, float>>();
     
+    private static readonly Dictionary<Animator, AnimationEventHelper> _eventHelpers = 
+        new Dictionary<Animator, AnimationEventHelper>();
+
     #region Animation Control
-    
+
     /// <summary>
-    /// Play an animation with error checking
+    /// Safely plays an animation with error checking and optional speed control
     /// </summary>
-    public static bool PlayAnimation(Animator animator, string stateName, int layer = 0)
+    /// <param name="animator">Target animator component</param>
+    /// <param name="stateName">Name of the animation state to play</param>
+    /// <param name="layer">Target animation layer (default: 0)</param>
+    /// <param name="normalizedTime">Start time of the animation (default: 0)</param>
+    /// <param name="speed">Playback speed (default: 1)</param>
+    /// <returns>True if animation started successfully</returns>
+    public static bool PlayAnimation(Animator animator, string stateName, int layer = 0, float normalizedTime = 0f, float speed = 1f)
     {
-        if (!animator)
-        {
-            Debug.LogError("Animator is null");
+        if (animator == null || string.IsNullOrEmpty(stateName))
             return false;
-        }
 
         try
         {
-            animator.Play(stateName, layer);
+            animator.speed = speed;
+            animator.Play(stateName, layer, normalizedTime);
             return true;
         }
         catch (Exception e)
@@ -50,152 +76,236 @@ public static class AnimationHelper
     }
 
     /// <summary>
-    /// Smoothly crossfade between animations
+    /// Cross-fades between animation states with smooth transitions
     /// </summary>
-    public static bool CrossFade(Animator animator, string stateName, float transitionDuration, int layer = 0)
+    /// <param name="animator">Target animator</param>
+    /// <param name="stateName">Target animation state</param>
+    /// <param name="duration">Transition duration in seconds</param>
+    /// <param name="layer">Target layer (default: -1 for all layers)</param>
+    public static void CrossFadeAnimation(Animator animator, string stateName, float duration, int layer = -1)
     {
-        if (!animator)
+        if (animator != null && !string.IsNullOrEmpty(stateName))
         {
-            Debug.LogError("Animator is null");
-            return false;
-        }
-
-        try
-        {
-            animator.CrossFade(stateName, transitionDuration, layer);
-            return true;
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"Failed to crossfade to animation {stateName}: {e.Message}");
-            return false;
+            animator.CrossFade(stateName, duration, layer);
         }
     }
-    
-    #endregion
-    
-    #region Runtime Modifications
-    
+
     /// <summary>
-    /// Set the speed of a specific parameter
+    /// Blends between two animation layers
     /// </summary>
-    public static void SetParameterSpeed(Animator animator, string parameterName, float speed)
+    /// <param name="animator">Target animator</param>
+    /// <param name="layer">Layer to blend</param>
+    /// <param name="weight">Blend weight (0-1)</param>
+    /// <param name="duration">Blend duration</param>
+    public static IEnumerator BlendLayer(Animator animator, int layer, float weight, float duration)
     {
-        if (!animator) return;
+        if (animator == null) yield break;
+
+        float startWeight = animator.GetLayerWeight(layer);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            animator.SetLayerWeight(layer, Mathf.Lerp(startWeight, weight, t));
+            yield return null;
+        }
+
+        animator.SetLayerWeight(layer, weight);
+    }
+
+    #endregion
+
+    #region Runtime Modifications
+
+    /// <summary>
+    /// Modifies animation speed with state preservation
+    /// </summary>
+    /// <param name="animator">Target animator</param>
+    /// <param name="stateName">Animation state name</param>
+    /// <param name="speedMultiplier">Speed multiplier</param>
+    public static void SetAnimationSpeed(Animator animator, string stateName, float speedMultiplier)
+    {
+        if (animator == null) return;
 
         if (!_storedSpeeds.ContainsKey(animator))
+        {
             _storedSpeeds[animator] = new Dictionary<string, float>();
+        }
 
-        _storedSpeeds[animator][parameterName] = animator.GetFloat(parameterName);
-        animator.SetFloat(parameterName, speed);
+        _storedSpeeds[animator][stateName] = speedMultiplier;
+        
+        if (IsPlaying(animator, stateName))
+        {
+            animator.speed = speedMultiplier;
+        }
     }
 
     /// <summary>
-    /// Restore the original speed of a parameter
+    /// Restores original animation speed
     /// </summary>
-    public static void RestoreParameterSpeed(Animator animator, string parameterName)
+    /// <param name="animator">Target animator</param>
+    /// <param name="stateName">Animation state name</param>
+    public static void RestoreAnimationSpeed(Animator animator, string stateName)
     {
-        if (!animator || !_storedSpeeds.ContainsKey(animator) || 
-            !_storedSpeeds[animator].ContainsKey(parameterName)) 
-            return;
+        if (animator == null || !_storedSpeeds.ContainsKey(animator)) return;
 
-        animator.SetFloat(parameterName, _storedSpeeds[animator][parameterName]);
-        _storedSpeeds[animator].Remove(parameterName);
+        if (_storedSpeeds[animator].ContainsKey(stateName))
+        {
+            animator.speed = 1f;
+            _storedSpeeds[animator].Remove(stateName);
+        }
     }
-    
+
     #endregion
-    
+
     #region State Management
-    
+
     /// <summary>
-    /// Check if an animation state exists
+    /// Checks if a specific animation is currently playing
     /// </summary>
-    public static bool HasState(Animator animator, string stateName, int layer = 0)
+    /// <param name="animator">Target animator</param>
+    /// <param name="stateName">Animation state name</param>
+    /// <param name="layer">Animation layer (default: 0)</param>
+    /// <returns>True if the animation is playing</returns>
+    public static bool IsPlaying(Animator animator, string stateName, int layer = 0)
     {
-        if (!animator) return false;
+        if (animator == null) return false;
 
-        try
-        {
-            var controller = animator.runtimeAnimatorController as UnityEngine.RuntimeAnimatorController;
-            if (!controller) return false;
-
-            return Array.Exists(controller.animationClips, clip => clip.name == stateName);
-        }
-        catch (Exception)
-        {
-            return false;
-        }
+        var stateInfo = animator.GetCurrentAnimatorStateInfo(layer);
+        return stateInfo.IsName(stateName);
     }
 
     /// <summary>
-    /// Get the length of an animation clip
+    /// Gets the normalized time of the current animation
     /// </summary>
-    public static float GetClipLength(Animator animator, string clipName)
+    /// <param name="animator">Target animator</param>
+    /// <param name="layer">Animation layer</param>
+    /// <returns>Normalized time (0-1) of current animation</returns>
+    public static float GetNormalizedTime(Animator animator, int layer = 0)
     {
-        if (!animator) return 0f;
+        if (animator == null) return 0f;
 
-        var controller = animator.runtimeAnimatorController as UnityEngine.RuntimeAnimatorController;
-        if (!controller) return 0f;
-
-        var clip = Array.Find(controller.animationClips, c => c.name == clipName);
-        return clip ? clip.length : 0f;
+        var stateInfo = animator.GetCurrentAnimatorStateInfo(layer);
+        return stateInfo.normalizedTime;
     }
-    
+
+    /// <summary>
+    /// Waits for the current animation to complete
+    /// </summary>
+    /// <param name="animator">Target animator</param>
+    /// <param name="stateName">Animation state name</param>
+    /// <param name="layer">Animation layer</param>
+    public static IEnumerator WaitForAnimationComplete(Animator animator, string stateName, int layer = 0)
+    {
+        if (animator == null) yield break;
+
+        while (!IsPlaying(animator, stateName, layer))
+            yield return null;
+
+        var stateInfo = animator.GetCurrentAnimatorStateInfo(layer);
+        yield return new WaitForSeconds(stateInfo.length);
+    }
+
     #endregion
-    
-    #region Event Handling
-    
-    /// <summary>
-    /// Add a callback when an animation reaches a specific normalized time
-    /// </summary>
-    public static void AddAnimationCallback(
-        Animator animator, 
-        string stateName, 
-        float normalizedTime, 
-        Action callback)
-    {
-        if (!animator) return;
 
-        IEnumerator WaitForAnimationTime()
+    #region Event Handling
+
+    /// <summary>
+    /// Registers a callback for animation events
+    /// </summary>
+    /// <param name="animator">Target animator</param>
+    /// <param name="callback">Event callback</param>
+    public static void RegisterAnimationEvent(Animator animator, AnimationEventHelper.AnimationEventCallback callback)
+    {
+        if (animator == null) return;
+
+        if (!_eventHelpers.ContainsKey(animator))
         {
-            while (true)
+            var helper = animator.gameObject.AddComponent<AnimationEventHelper>();
+            _eventHelpers[animator] = helper;
+        }
+
+        _eventHelpers[animator].OnAnimationEvent += callback;
+    }
+
+    /// <summary>
+    /// Unregisters an animation event callback
+    /// </summary>
+    /// <param name="animator">Target animator</param>
+    /// <param name="callback">Event callback to remove</param>
+    public static void UnregisterAnimationEvent(Animator animator, AnimationEventHelper.AnimationEventCallback callback)
+    {
+        if (animator == null || !_eventHelpers.ContainsKey(animator)) return;
+
+        _eventHelpers[animator].OnAnimationEvent -= callback;
+    }
+
+    #endregion
+
+    #region Parameter Management
+
+    /// <summary>
+    /// Safely sets an animator parameter with type checking
+    /// </summary>
+    /// <param name="animator">Target animator</param>
+    /// <param name="paramName">Parameter name</param>
+    /// <param name="value">Parameter value</param>
+    public static void SetParameter(Animator animator, string paramName, object value)
+    {
+        if (animator == null || string.IsNullOrEmpty(paramName)) return;
+
+        foreach (AnimatorControllerParameter param in animator.parameters)
+        {
+            if (param.name == paramName)
             {
-                var stateInfo = animator.GetCurrentAnimatorStateInfo(0);
-                if (stateInfo.IsName(stateName) && stateInfo.normalizedTime >= normalizedTime)
+                switch (param.type)
                 {
-                    callback?.Invoke();
-                    yield break;
+                    case AnimatorControllerParameterType.Bool when value is bool boolValue:
+                        animator.SetBool(paramName, boolValue);
+                        break;
+                    case AnimatorControllerParameterType.Int when value is int intValue:
+                        animator.SetInteger(paramName, intValue);
+                        break;
+                    case AnimatorControllerParameterType.Float when value is float floatValue:
+                        animator.SetFloat(paramName, floatValue);
+                        break;
+                    case AnimatorControllerParameterType.Trigger when value is bool triggerValue:
+                        if (triggerValue)
+                            animator.SetTrigger(paramName);
+                        else
+                            animator.ResetTrigger(paramName);
+                        break;
                 }
-                yield return null;
+                break;
             }
         }
-
-        var helper = animator.gameObject.GetComponent<AnimationEventHelper>() ?? 
-            animator.gameObject.AddComponent<AnimationEventHelper>();
-        helper.StartCoroutine(WaitForAnimationTime());
     }
-    
+
     #endregion
-    
+
     #region Cleanup
-    
+
     /// <summary>
-    /// Clear stored speeds for an animator
+    /// Cleans up resources associated with an animator
     /// </summary>
-    public static void ClearStoredSpeeds(Animator animator)
+    /// <param name="animator">Target animator</param>
+    public static void Cleanup(Animator animator)
     {
+        if (animator == null) return;
+
         if (_storedSpeeds.ContainsKey(animator))
             _storedSpeeds.Remove(animator);
+
+        if (_eventHelpers.ContainsKey(animator))
+        {
+            if (_eventHelpers[animator] != null)
+                UnityEngine.Object.Destroy(_eventHelpers[animator]);
+            _eventHelpers.Remove(animator);
+        }
     }
 
-    /// <summary>
-    /// Clear all stored speeds
-    /// </summary>
-    public static void ClearAllStoredSpeeds()
-    {
-        _storedSpeeds.Clear();
-    }
-    
     #endregion
 }
 

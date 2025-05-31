@@ -18,19 +18,12 @@ using System.Threading.Tasks;
 /// </summary>
 public static class AudioHelper
 {
-    // Audio source pools
     private static readonly Dictionary<string, Queue<AudioSource>> _audioSourcePools 
         = new Dictionary<string, Queue<AudioSource>>();
-    
-    // Currently playing audio
     private static readonly Dictionary<string, AudioSource> _activeSources 
         = new Dictionary<string, AudioSource>();
-    
-    // Cached audio clips
     private static readonly Dictionary<string, AudioClip> _clipCache 
         = new Dictionary<string, AudioClip>();
-    
-    // Mixer settings
     private static AudioMixer _audioMixer;
     private static readonly Dictionary<string, float> _volumeSettings 
         = new Dictionary<string, float>();
@@ -38,29 +31,12 @@ public static class AudioHelper
     #region Initialization
     
     /// <summary>
-    /// Initialize the audio system
+    /// Initializes the audio system with the specified mixer
     /// </summary>
-    public static void Initialize(AudioMixer mixer, int poolSize = 10)
+    public static void Initialize(AudioMixer mixer)
     {
         _audioMixer = mixer;
-        
-        // Create initial pool of audio sources
-        var root = new GameObject("AudioSourcePool").transform;
-        UnityEngine.Object.DontDestroyOnLoad(root.gameObject);
-        
-        for (int i = 0; i < poolSize; i++)
-        {
-            CreatePooledAudioSource(root);
-        }
-    }
-    
-    private static AudioSource CreatePooledAudioSource(Transform parent)
-    {
-        var go = new GameObject("PooledAudioSource");
-        go.transform.SetParent(parent);
-        var source = go.AddComponent<AudioSource>();
-        AddToPool("default", source);
-        return source;
+        LoadSavedVolumes();
     }
     
     #endregion
@@ -68,57 +44,45 @@ public static class AudioHelper
     #region Sound Effects
     
     /// <summary>
-    /// Play a sound effect
+    /// Plays a sound effect with optional 3D positioning
     /// </summary>
-    public static AudioSource PlaySound(
-        AudioClip clip,
-        float volume = 1f,
-        float pitch = 1f,
-        bool loop = false,
-        string mixerGroup = "SFX")
+    public static AudioSource PlaySound(AudioClip clip, string sourceId = null, bool loop = false, 
+        Vector3? position = null, float volume = 1f, float pitch = 1f)
     {
-        var source = GetAudioSource();
+        if (clip == null) return null;
+
+        AudioSource source = GetAudioSource(sourceId);
         if (source == null) return null;
-        
+
         source.clip = clip;
+        source.loop = loop;
         source.volume = volume;
         source.pitch = pitch;
-        source.loop = loop;
-        
-        if (_audioMixer != null)
+
+        if (position.HasValue)
         {
-            var group = _audioMixer.FindMatchingGroups(mixerGroup)[0];
-            source.outputAudioMixerGroup = group;
-        }
-        
-        source.Play();
-        
-        if (!loop)
-        {
-            ReturnToPoolAfterDelay(source, clip.length);
-        }
-        
-        return source;
-    }
-    
-    /// <summary>
-    /// Play a sound effect at a world position
-    /// </summary>
-    public static AudioSource PlaySoundAtPosition(
-        AudioClip clip,
-        Vector3 position,
-        float volume = 1f,
-        float pitch = 1f,
-        bool loop = false,
-        string mixerGroup = "SFX")
-    {
-        var source = PlaySound(clip, volume, pitch, loop, mixerGroup);
-        if (source != null)
-        {
-            source.transform.position = position;
+            source.transform.position = position.Value;
             source.spatialBlend = 1f; // Full 3D
         }
+        else
+        {
+            source.spatialBlend = 0f; // 2D
+        }
+
+        source.Play();
         return source;
+    }
+
+    /// <summary>
+    /// Plays a random sound from a collection
+    /// </summary>
+    public static AudioSource PlayRandomSound(AudioClip[] clips, string sourceId = null, 
+        Vector3? position = null, float volume = 1f)
+    {
+        if (clips == null || clips.Length == 0) return null;
+
+        int index = UnityEngine.Random.Range(0, clips.Length);
+        return PlaySound(clips[index], sourceId, false, position, volume);
     }
     
     #endregion
@@ -126,38 +90,48 @@ public static class AudioHelper
     #region Music
     
     /// <summary>
-    /// Play background music with optional crossfade
+    /// Starts playing background music with optional crossfade
     /// </summary>
-    public static async Task PlayMusic(
-        AudioClip music,
-        float fadeTime = 1f,
-        float volume = 1f,
-        string mixerGroup = "Music")
+    public static async Task PlayMusic(AudioClip music, float fadeInDuration = 1f, float fadeOutDuration = 1f)
     {
-        if (_activeSources.TryGetValue("music", out var currentMusic))
+        if (music == null) return;
+
+        AudioSource newSource = GetAudioSource("Music_New");
+        AudioSource oldSource = null;
+
+        if (_activeSources.TryGetValue("Music_Current", out oldSource))
         {
-            await FadeOut(currentMusic, fadeTime);
+            // Start fade out of current music
+            float startVolume = oldSource.volume;
+            float elapsed = 0f;
+
+            while (elapsed < fadeOutDuration)
+            {
+                elapsed += Time.deltaTime;
+                oldSource.volume = Mathf.Lerp(startVolume, 0f, elapsed / fadeOutDuration);
+                await Task.Yield();
+            }
+
+            ReturnAudioSource("Music_Current");
         }
-        
-        var source = PlaySound(music, 0f, 1f, true, mixerGroup);
-        if (source != null)
+
+        // Setup and start new music
+        newSource.clip = music;
+        newSource.loop = true;
+        newSource.volume = 0f;
+        newSource.spatialBlend = 0f;
+        newSource.Play();
+
+        // Fade in new music
+        float fadeElapsed = 0f;
+        while (fadeElapsed < fadeInDuration)
         {
-            _activeSources["music"] = source;
-            await FadeIn(source, fadeTime, volume);
+            fadeElapsed += Time.deltaTime;
+            newSource.volume = Mathf.Lerp(0f, 1f, fadeElapsed / fadeInDuration);
+            await Task.Yield();
         }
-    }
-    
-    /// <summary>
-    /// Stop background music
-    /// </summary>
-    public static async Task StopMusic(float fadeTime = 1f)
-    {
-        if (_activeSources.TryGetValue("music", out var music))
-        {
-            await FadeOut(music, fadeTime);
-            ReturnToPool("default", music);
-            _activeSources.Remove("music");
-        }
+
+        _activeSources["Music_Current"] = newSource;
     }
     
     #endregion
@@ -165,71 +139,96 @@ public static class AudioHelper
     #region Mixer Control
     
     /// <summary>
-    /// Set volume for a mixer group
+    /// Sets the volume of a mixer group
     /// </summary>
     public static void SetVolume(string parameterName, float normalizedVolume)
     {
         if (_audioMixer == null) return;
-        
-        _volumeSettings[parameterName] = normalizedVolume;
-        float db = normalizedVolume > 0 ? 
-            Mathf.Log10(normalizedVolume) * 20 : 
+
+        float dbValue = normalizedVolume > 0f ? 
+            Mathf.Log10(normalizedVolume) * 20f : 
             -80f;
-        
-        _audioMixer.SetFloat(parameterName, db);
+
+        _audioMixer.SetFloat(parameterName, dbValue);
+        _volumeSettings[parameterName] = normalizedVolume;
+        SaveVolumes();
     }
-    
+
     /// <summary>
-    /// Get volume for a mixer group
+    /// Gets the current volume of a mixer group
     /// </summary>
     public static float GetVolume(string parameterName)
     {
-        return _volumeSettings.TryGetValue(parameterName, out float volume) ? 
-            volume : 1f;
+        if (_volumeSettings.TryGetValue(parameterName, out float volume))
+            return volume;
+        return 1f;
     }
     
     #endregion
     
     #region Pool Management
     
-    private static AudioSource GetAudioSource()
+    private static AudioSource GetAudioSource(string sourceId = null)
     {
-        if (!_audioSourcePools.TryGetValue("default", out var pool))
-            return null;
-            
-        if (pool.Count == 0)
+        // If sourceId is provided and already exists, return that source
+        if (!string.IsNullOrEmpty(sourceId) && _activeSources.TryGetValue(sourceId, out AudioSource existingSource))
         {
-            var parent = pool.Peek().transform.parent;
-            return CreatePooledAudioSource(parent);
+            return existingSource;
         }
+
+        // Get or create a pooled source
+        AudioSource source = GetPooledAudioSource();
         
-        return pool.Dequeue();
-    }
-    
-    private static void AddToPool(string poolName, AudioSource source)
-    {
-        if (!_audioSourcePools.ContainsKey(poolName))
+        if (!string.IsNullOrEmpty(sourceId))
         {
-            _audioSourcePools[poolName] = new Queue<AudioSource>();
+            _activeSources[sourceId] = source;
         }
-        
-        source.gameObject.SetActive(false);
-        _audioSourcePools[poolName].Enqueue(source);
+
+        return source;
     }
-    
-    private static void ReturnToPool(string poolName, AudioSource source)
+
+    private static AudioSource GetPooledAudioSource()
     {
-        source.Stop();
-        source.clip = null;
-        AddToPool(poolName, source);
-    }
-    
-    private static async void ReturnToPoolAfterDelay(AudioSource source, float delay)
-    {
-        await Task.Delay((int)(delay * 1000));
-        if (source != null)
+        const string POOL_KEY = "DefaultPool";
+        Queue<AudioSource> pool;
+
+        if (!_audioSourcePools.TryGetValue(POOL_KEY, out pool))
         {
-            ReturnToPool("default", source);
+            pool = new Queue<AudioSource>();
+            _audioSourcePools[POOL_KEY] = pool;
+        }
+
+        AudioSource source;
+        if (pool.Count > 0)
+        {
+            source = pool.Dequeue();
+        }
+        else
+        {
+            // Create new GameObject with AudioSource
+            GameObject obj = new GameObject("AudioSource");
+            source = obj.AddComponent<AudioSource>();
+            GameObject.DontDestroyOnLoad(obj);
+        }
+
+        return source;
+    }
+
+    private static void ReturnAudioSource(string sourceId)
+    {
+        if (_activeSources.TryGetValue(sourceId, out AudioSource source))
+        {
+            source.Stop();
+            source.clip = null;
+            _activeSources.Remove(sourceId);
+
+            // Return to pool
+            const string POOL_KEY = "DefaultPool";
+            if (!_audioSourcePools.ContainsKey(POOL_KEY))
+            {
+                _audioSourcePools[POOL_KEY] = new Queue<AudioSource>();
+            }
+            _audioSourcePools[POOL_KEY].Enqueue(source);
         }
     }
     
@@ -237,33 +236,86 @@ public static class AudioHelper
     
     #region Utilities
     
-    private static async Task FadeOut(AudioSource source, float duration)
+    private static void LoadSavedVolumes()
     {
-        float startVolume = source.volume;
-        float time = 0;
-        
-        while (time < duration)
+        // Load saved volume settings from PlayerPrefs
+        string[] mixerParams = { "MasterVolume", "MusicVolume", "SFXVolume", "UIVolume" };
+        foreach (string param in mixerParams)
         {
-            time += Time.deltaTime;
-            source.volume = Mathf.Lerp(startVolume, 0f, time / duration);
-            await Task.Yield();
+            float savedVolume = PlayerPrefs.GetFloat($"Audio_{param}", 1f);
+            SetVolume(param, savedVolume);
         }
-        
-        source.volume = 0f;
     }
-    
-    private static async Task FadeIn(AudioSource source, float duration, float targetVolume)
+
+    private static void SaveVolumes()
     {
-        float time = 0;
-        
-        while (time < duration)
+        foreach (var kvp in _volumeSettings)
         {
-            time += Time.deltaTime;
-            source.volume = Mathf.Lerp(0f, targetVolume, time / duration);
+            PlayerPrefs.SetFloat($"Audio_{kvp.Key}", kvp.Value);
+        }
+        PlayerPrefs.Save();
+    }
+
+    /// <summary>
+    /// Fades the volume of an audio source over time
+    /// </summary>
+    public static async Task FadeVolume(AudioSource source, float targetVolume, float duration)
+    {
+        if (source == null) return;
+
+        float startVolume = source.volume;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            source.volume = Mathf.Lerp(startVolume, targetVolume, elapsed / duration);
             await Task.Yield();
         }
-        
+
         source.volume = targetVolume;
+    }
+
+    /// <summary>
+    /// Stops all active audio sources
+    /// </summary>
+    public static void StopAllSounds()
+    {
+        foreach (var source in _activeSources.Values)
+        {
+            if (source != null)
+            {
+                source.Stop();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pauses all active audio sources
+    /// </summary>
+    public static void PauseAllSounds()
+    {
+        foreach (var source in _activeSources.Values)
+        {
+            if (source != null && source.isPlaying)
+            {
+                source.Pause();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resumes all paused audio sources
+    /// </summary>
+    public static void ResumeAllSounds()
+    {
+        foreach (var source in _activeSources.Values)
+        {
+            if (source != null && !source.isPlaying)
+            {
+                source.UnPause();
+            }
+        }
     }
     
     #endregion

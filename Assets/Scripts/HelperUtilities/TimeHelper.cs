@@ -33,22 +33,34 @@ public static class TimeHelper
     #region Timer Management
     
     /// <summary>
-    /// Start a new timer
+    /// Creates and starts a new timer with the specified duration
     /// </summary>
-    public static void StartTimer(string id, float duration, Action onComplete = null)
+    /// <param name="id">Unique identifier for the timer</param>
+    /// <param name="duration">Duration in seconds</param>
+    /// <param name="onComplete">Action to execute when timer completes</param>
+    /// <param name="loop">Whether the timer should loop</param>
+    public static void StartTimer(string id, float duration, Action onComplete = null, bool loop = false)
     {
         if (_timers.ContainsKey(id))
         {
-            _timers[id].Reset(duration);
+            Debug.LogWarning($"Timer {id} already exists. Stopping existing timer.");
+            StopTimer(id);
         }
-        else
+
+        var timer = new Timer
         {
-            _timers[id] = new Timer(duration, onComplete);
-        }
+            Duration = duration,
+            TimeRemaining = duration,
+            OnComplete = onComplete,
+            IsLooping = loop,
+            IsRunning = true
+        };
+
+        _timers[id] = timer;
     }
-    
+
     /// <summary>
-    /// Stop and remove a timer
+    /// Stops and removes a timer
     /// </summary>
     public static void StopTimer(string id)
     {
@@ -57,21 +69,35 @@ public static class TimeHelper
             _timers.Remove(id);
         }
     }
-    
+
     /// <summary>
-    /// Get remaining time on a timer
+    /// Pauses a running timer
+    /// </summary>
+    public static void PauseTimer(string id)
+    {
+        if (_timers.TryGetValue(id, out Timer timer))
+        {
+            timer.IsRunning = false;
+        }
+    }
+
+    /// <summary>
+    /// Resumes a paused timer
+    /// </summary>
+    public static void ResumeTimer(string id)
+    {
+        if (_timers.TryGetValue(id, out Timer timer))
+        {
+            timer.IsRunning = true;
+        }
+    }
+
+    /// <summary>
+    /// Gets the remaining time for a timer
     /// </summary>
     public static float GetRemainingTime(string id)
     {
-        return _timers.TryGetValue(id, out var timer) ? timer.RemainingTime : 0f;
-    }
-    
-    /// <summary>
-    /// Check if a timer is running
-    /// </summary>
-    public static bool IsTimerRunning(string id)
-    {
-        return _timers.ContainsKey(id) && !_timers[id].IsComplete;
+        return _timers.TryGetValue(id, out Timer timer) ? timer.TimeRemaining : 0f;
     }
     
     #endregion
@@ -79,32 +105,42 @@ public static class TimeHelper
     #region Cooldown System
     
     /// <summary>
-    /// Start a cooldown
+    /// Starts a cooldown with the specified duration
     /// </summary>
+    /// <param name="id">Unique identifier for the cooldown</param>
+    /// <param name="duration">Duration in seconds</param>
     public static void StartCooldown(string id, float duration)
     {
         _cooldowns[id] = Time.time + duration;
     }
-    
+
     /// <summary>
-    /// Check if a cooldown is complete
+    /// Checks if a cooldown has finished
     /// </summary>
+    /// <returns>True if cooldown is complete or doesn't exist</returns>
     public static bool IsCooldownComplete(string id)
     {
-        return !_cooldowns.ContainsKey(id) || Time.time >= _cooldowns[id];
+        if (!_cooldowns.TryGetValue(id, out float endTime))
+            return true;
+
+        if (Time.time >= endTime)
+        {
+            _cooldowns.Remove(id);
+            return true;
+        }
+
+        return false;
     }
-    
+
     /// <summary>
-    /// Get remaining cooldown time
+    /// Gets the remaining time for a cooldown
     /// </summary>
     public static float GetCooldownRemaining(string id)
     {
-        if (_cooldowns.TryGetValue(id, out float endTime))
-        {
-            float remaining = endTime - Time.time;
-            return remaining > 0f ? remaining : 0f;
-        }
-        return 0f;
+        if (!_cooldowns.TryGetValue(id, out float endTime))
+            return 0f;
+
+        return Mathf.Max(0f, endTime - Time.time);
     }
     
     #endregion
@@ -112,31 +148,55 @@ public static class TimeHelper
     #region Time Scale Control
 
     /// <summary>
-    /// Set the global time scale
+    /// Sets the game time scale with optional fade
     /// </summary>
-    public static void SetTimeScale(float scale)
+    public static async Task SetTimeScale(float targetScale, float duration = 0f)
+    {
+        if (duration <= 0)
+        {
+            Time.timeScale = targetScale;
+            return;
+        }
+
+        float startScale = Time.timeScale;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            Time.timeScale = Mathf.Lerp(startScale, targetScale, elapsed / duration);
+            await Task.Yield();
+        }
+
+        Time.timeScale = targetScale;
+    }
+
+    /// <summary>
+    /// Pauses the game and returns a function to resume
+    /// </summary>
+    public static Action PauseGame(bool smooth = true)
     {
         _previousTimeScale = Time.timeScale;
-        Time.timeScale = scale;
-    }
-
-    /// <summary>
-    /// Restore the previous time scale
-    /// </summary>
-    public static void RestoreTimeScale()
-    {
-        Time.timeScale = _previousTimeScale;
-    }
-
-    /// <summary>
-    /// Pause/unpause the game
-    /// </summary>
-    public static void SetPaused(bool paused)
-    {
-        if (paused)
+        if (smooth)
         {
-            _previousTimeScale = Time.timeScale;
+            _ = SetTimeScale(0f, 0.2f);
+        }
+        else
+        {
             Time.timeScale = 0f;
+        }
+
+        return () => ResumeGame(smooth);
+    }
+
+    /// <summary>
+    /// Resumes the game from a paused state
+    /// </summary>
+    public static void ResumeGame(bool smooth = true)
+    {
+        if (smooth)
+        {
+            _ = SetTimeScale(_previousTimeScale, 0.2f);
         }
         else
         {
@@ -149,144 +209,241 @@ public static class TimeHelper
     #region Scheduling System
 
     /// <summary>
-    /// Schedule an action to be executed after a delay
+    /// Schedules an action to be executed after a delay
     /// </summary>
-    public static void ScheduleAction(Action action, float delay, bool ignoreTimeScale = false)
+    public static string ScheduleAction(Action action, float delay, bool useUnscaledTime = false)
     {
-        if (action == null)
-            return;
-
-        float executeTime = (ignoreTimeScale ? Time.unscaledTime : Time.time) + delay;
-        _scheduledActions.Add(new ScheduledAction(action, executeTime, ignoreTimeScale));
-    }
-
-    /// <summary>
-    /// Schedule an action to be executed at a specific time
-    /// </summary>
-    public static void ScheduleActionAt(Action action, float executeTime, bool ignoreTimeScale = false)
-    {
-        if (action == null)
-            return;
-
-        _scheduledActions.Add(new ScheduledAction(action, executeTime, ignoreTimeScale));
-    }
-
-    /// <summary>
-    /// Update scheduled actions (call this from Update)
-    /// </summary>
-    public static void UpdateScheduledActions()
-    {
-        for (int i = _scheduledActions.Count - 1; i >= 0; i--)
+        string id = Guid.NewGuid().ToString();
+        var scheduledAction = new ScheduledAction
         {
-            var action = _scheduledActions[i];
-            float currentTime = action.IgnoreTimeScale ? Time.unscaledTime : Time.time;
-            
-            if (currentTime >= action.ExecuteTime)
-            {
-                action.Action?.Invoke();
-                _scheduledActions.RemoveAt(i);
-            }
-        }
+            Id = id,
+            Action = action,
+            ExecutionTime = (useUnscaledTime ? Time.unscaledTime : Time.time) + delay,
+            UseUnscaledTime = useUnscaledTime
+        };
+
+        _scheduledActions.Add(scheduledAction);
+        return id;
     }
 
     /// <summary>
-    /// Clear all scheduled actions
+    /// Cancels a scheduled action
     /// </summary>
-    public static void ClearScheduledActions()
+    public static void CancelScheduledAction(string id)
     {
-        _scheduledActions.Clear();
+        _scheduledActions.RemoveAll(action => action.Id == id);
     }
-
+    
     #endregion
     
     #region Helper Classes
     
     private class Timer
     {
-        public float Duration { get; private set; }
-        public float StartTime { get; private set; }
-        public Action OnComplete { get; private set; }
-        public bool IsComplete { get; private set; }
-        
-        public float RemainingTime
-        {
-            get
-            {
-                if (IsComplete) return 0f;
-                float remaining = (StartTime + Duration) - Time.time;
-                return remaining > 0f ? remaining : 0f;
-            }
-        }
-        
-        public Timer(float duration, Action onComplete = null)
-        {
-            Duration = duration;
-            OnComplete = onComplete;
-            Reset(duration);
-        }
-        
-        public void Reset(float newDuration)
-        {
-            Duration = newDuration;
-            StartTime = Time.time;
-            IsComplete = false;
-        }
-        
-        public void Update()
-        {
-            if (!IsComplete && Time.time >= StartTime + Duration)
-            {
-                IsComplete = true;
-                OnComplete?.Invoke();
-            }
-        }
+        public float Duration { get; set; }
+        public float TimeRemaining { get; set; }
+        public Action OnComplete { get; set; }
+        public bool IsLooping { get; set; }
+        public bool IsRunning { get; set; }
     }
 
     private class ScheduledAction
     {
-        public Action Action { get; }
-        public float ExecuteTime { get; }
-        public bool IgnoreTimeScale { get; }
-        
-        public ScheduledAction(Action action, float executeTime, bool ignoreTimeScale)
-        {
-            Action = action;
-            ExecuteTime = executeTime;
-            IgnoreTimeScale = ignoreTimeScale;
-        }
+        public string Id { get; set; }
+        public Action Action { get; set; }
+        public float ExecutionTime { get; set; }
+        public bool UseUnscaledTime { get; set; }
     }
-
+    
     #endregion
     
     #region Utility Methods
     
     /// <summary>
-    /// Format a time span in a human-readable format
+    /// Updates all active timers and scheduled actions. Should be called in Update
     /// </summary>
-    public static string FormatTime(float seconds)
+    public static void UpdateTimers()
     {
-        TimeSpan timeSpan = TimeSpan.FromSeconds(seconds);
-        
-        if (timeSpan.Hours > 0)
+        var completedTimers = new List<string>();
+
+        foreach (var kvp in _timers)
         {
-            return string.Format("{0:D2}:{1:D2}:{2:D2}", 
-                timeSpan.Hours, 
-                timeSpan.Minutes, 
-                timeSpan.Seconds);
+            var timer = kvp.Value;
+            if (!timer.IsRunning) continue;
+
+            timer.TimeRemaining -= Time.deltaTime;
+
+            if (timer.TimeRemaining <= 0f)
+            {
+                timer.OnComplete?.Invoke();
+
+                if (timer.IsLooping)
+                {
+                    timer.TimeRemaining = timer.Duration;
+                }
+                else
+                {
+                    completedTimers.Add(kvp.Key);
+                }
+            }
         }
-        
-        return string.Format("{0:D2}:{1:D2}", 
-            timeSpan.Minutes, 
-            timeSpan.Seconds);
+
+        foreach (var id in completedTimers)
+        {
+            _timers.Remove(id);
+        }
+
+        // Update scheduled actions
+        var currentTime = Time.time;
+        var unscaledTime = Time.unscaledTime;
+        var completedActions = new List<ScheduledAction>();
+
+        foreach (var action in _scheduledActions)
+        {
+            float timeToCheck = action.UseUnscaledTime ? unscaledTime : currentTime;
+            if (timeToCheck >= action.ExecutionTime)
+            {
+                action.Action?.Invoke();
+                completedActions.Add(action);
+            }
+        }
+
+        foreach (var action in completedActions)
+        {
+            _scheduledActions.Remove(action);
+        }
     }
-    
+
     /// <summary>
-    /// Get current timestamp
+    /// Formats a time value into a string (MM:SS or HH:MM:SS)
     /// </summary>
-    public static long GetTimestamp()
+    public static string FormatTime(float timeInSeconds, bool includeHours = false)
     {
-        return DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        int hours = (int)(timeInSeconds / 3600f);
+        int minutes = (int)((timeInSeconds % 3600f) / 60f);
+        int seconds = (int)(timeInSeconds % 60f);
+
+        return includeHours || hours > 0 
+            ? $"{hours:00}:{minutes:00}:{seconds:00}"
+            : $"{minutes:00}:{seconds:00}";
     }
+
+    /// <summary>
+    /// Formats a TimeSpan into a human-readable string
+    /// </summary>
+    public static string FormatTimeSpan(TimeSpan timeSpan, bool shortFormat = false)
+    {
+        if (shortFormat)
+        {
+            if (timeSpan.TotalDays >= 1)
+                return $"{timeSpan.Days}d";
+            if (timeSpan.TotalHours >= 1)
+                return $"{timeSpan.Hours}h";
+            if (timeSpan.TotalMinutes >= 1)
+                return $"{timeSpan.Minutes}m";
+            return $"{timeSpan.Seconds}s";
+        }
+
+        List<string> parts = new List<string>();
+        if (timeSpan.Days > 0)
+            parts.Add($"{timeSpan.Days} day{(timeSpan.Days != 1 ? "s" : "")}");
+        if (timeSpan.Hours > 0)
+            parts.Add($"{timeSpan.Hours} hour{(timeSpan.Hours != 1 ? "s" : "")}");
+        if (timeSpan.Minutes > 0)
+            parts.Add($"{timeSpan.Minutes} minute{(timeSpan.Minutes != 1 ? "s" : "")}");
+        if (timeSpan.Seconds > 0 || parts.Count == 0)
+            parts.Add($"{timeSpan.Seconds} second{(timeSpan.Seconds != 1 ? "s" : "")}");
+
+        return string.Join(", ", parts);
+    }
+
+    #endregion
     
+    #region Time Measurement
+
+    /// <summary>
+    /// Measures the execution time of an action
+    /// </summary>
+    public static TimeSpan MeasureExecutionTime(Action action)
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        action();
+        stopwatch.Stop();
+        return stopwatch.Elapsed;
+    }
+
+    /// <summary>
+    /// Measures the execution time of an async action
+    /// </summary>
+    public static async Task<TimeSpan> MeasureExecutionTimeAsync(Func<Task> action)
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        await action();
+        stopwatch.Stop();
+        return stopwatch.Elapsed;
+    }
+
+    #endregion
+    
+    #region Update Management
+
+    /// <summary>
+    /// Updates all active timers and scheduled actions
+    /// </summary>
+    public static void Update()
+    {
+        UpdateTimers();
+        UpdateCooldowns();
+        UpdateScheduledActions();
+    }
+
+    private static void UpdateCooldowns()
+    {
+        var completedCooldowns = new List<string>();
+        var currentTime = Time.time;
+
+        foreach (var cooldown in _cooldowns)
+        {
+            if (currentTime >= cooldown.Value)
+            {
+                completedCooldowns.Add(cooldown.Key);
+            }
+        }
+
+        foreach (var key in completedCooldowns)
+        {
+            _cooldowns.Remove(key);
+        }
+    }
+
+    private static void UpdateScheduledActions()
+    {
+        var currentTime = Time.time;
+        var unscaledTime = Time.unscaledTime;
+        var completedActions = new List<ScheduledAction>();
+
+        foreach (var action in _scheduledActions)
+        {
+            float timeToCheck = action.UseUnscaledTime ? unscaledTime : currentTime;
+            if (timeToCheck >= action.ExecutionTime)
+            {
+                try
+                {
+                    action.Action?.Invoke();
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"Error executing scheduled action: {e.Message}");
+                }
+                completedActions.Add(action);
+            }
+        }
+
+        foreach (var action in completedActions)
+        {
+            _scheduledActions.Remove(action);
+        }
+    }
+
     #endregion
 }

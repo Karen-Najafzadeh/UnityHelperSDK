@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using DG.Tweening;
+using TMPro;
+using UnityEngine.UI;
 
 /// <summary>
 /// A comprehensive scene management helper that handles scene loading, transitions,
@@ -30,14 +32,23 @@ public static class SceneHelper
     #region Scene Loading
     
     /// <summary>
-    /// Load a scene with optional transition
+    /// Loads a scene with transition and optional state persistence
     /// </summary>
     public static async Task LoadSceneAsync(string sceneName, LoadSceneMode mode = LoadSceneMode.Single, 
-        bool showLoadingScreen = true, Action<float> onProgress = null)
+        bool showLoadingScreen = true, bool persistState = false)
     {
+        if (persistState)
+        {
+            SaveSceneState();
+        }
+
         if (showLoadingScreen)
         {
-            await UIHelper.ShowLoadingScreen();
+            await ShowLoadingScreen();
+        }
+        else
+        {
+            await FadeToBlack(_defaultFadeTime);
         }
 
         var operation = SceneManager.LoadSceneAsync(sceneName, mode);
@@ -45,86 +56,112 @@ public static class SceneHelper
 
         while (operation.progress < 0.9f)
         {
-            onProgress?.Invoke(operation.progress);
             await Task.Yield();
+            if (showLoadingScreen)
+            {
+                UpdateLoadingProgress(operation.progress);
+            }
         }
 
         operation.allowSceneActivation = true;
-        _activeScenes.Add(sceneName);
+        await Task.Yield(); // Wait for scene to actually change
+
+        if (persistState)
+        {
+            RestoreSceneState();
+        }
 
         if (showLoadingScreen)
         {
-            await UIHelper.HideLoadingScreen();
+            await HideLoadingScreen();
         }
+        else
+        {
+            await FadeFromBlack(_defaultFadeTime);
+        }
+
+        if (mode == LoadSceneMode.Single)
+        {
+            _activeScenes.Clear();
+        }
+        _activeScenes.Add(sceneName);
     }
 
     /// <summary>
-    /// Unload a scene
+    /// Unloads a scene with optional transition
     /// </summary>
-    public static async Task UnloadSceneAsync(string sceneName)
+    public static async Task UnloadSceneAsync(string sceneName, bool showTransition = true)
     {
-        if (_activeScenes.Contains(sceneName))
+        if (!_activeScenes.Contains(sceneName))
+            return;
+
+        if (showTransition)
         {
-            SaveSceneState(sceneName);
-            var unloadOperation = SceneManager.UnloadSceneAsync(sceneName);
-            while (!unloadOperation.isDone)
-            {
-                await Task.Yield();
-            }
-            _activeScenes.Remove(sceneName);
+            await FadeToBlack(_defaultFadeTime);
+        }
+
+        var operation = SceneManager.UnloadSceneAsync(sceneName);
+        while (!operation.isDone)
+        {
+            await Task.Yield();
+        }
+
+        _activeScenes.Remove(sceneName);
+
+        if (showTransition)
+        {
+            await FadeFromBlack(_defaultFadeTime);
         }
     }
     
     #endregion
     
     #region Scene State Management
-    
-    /// <summary>
-    /// Save the current state of a scene
+      /// <summary>
+    /// Saves the current scene state
     /// </summary>
-    public static void SaveSceneState(string sceneName)
+    public static void SaveSceneState()
     {
-        var state = new SceneState
-        {
-            TimeStamp = DateTime.Now,
-            PlayerPosition = GameObject.FindGameObjectWithTag("Player")?.transform.position ?? Vector3.zero,
-            ActiveObjects = new List<string>()
-        };
+        var currentScene = SceneManager.GetActiveScene();
+        var state = new SceneState();
 
-        // Save active object states
-        var sceneObjects = GameObject.FindObjectsOfType<GameObject>();
-        foreach (var obj in sceneObjects)
+        // Get all game objects in the scene
+        var rootObjects = currentScene.GetRootGameObjects();
+        foreach (var obj in rootObjects)
         {
-            if (obj.scene.name == sceneName)
+            var serializableObjects = obj.GetComponentsInChildren<ISceneStateSerializable>(true);
+            foreach (var serializable in serializableObjects)
             {
-                state.ActiveObjects.Add(obj.name);
+                string stateKey = serializable.GetStateKey();
+                if (!string.IsNullOrEmpty(stateKey))
+                {
+                    state.ObjectStates[stateKey] = serializable.SaveState();
+                }
             }
         }
 
-        _sceneStates[sceneName] = state;
+        _sceneStates[currentScene.name] = state;
     }
 
     /// <summary>
-    /// Restore a previously saved scene state
+    /// Restores saved scene state
     /// </summary>
-    public static void RestoreSceneState(string sceneName)
+    public static void RestoreSceneState()
     {
-        if (_sceneStates.TryGetValue(sceneName, out var state))
-        {
-            // Restore player position
-            var player = GameObject.FindGameObjectWithTag("Player");
-            if (player != null)
-            {
-                player.transform.position = state.PlayerPosition;
-            }
+        var currentScene = SceneManager.GetActiveScene();
+        if (!_sceneStates.TryGetValue(currentScene.name, out SceneState state))
+            return;
 
-            // Restore object states
-            var sceneObjects = GameObject.FindObjectsOfType<GameObject>();
-            foreach (var obj in sceneObjects)
+        var rootObjects = currentScene.GetRootGameObjects();
+        foreach (var obj in rootObjects)
+        {
+            var serializableObjects = obj.GetComponentsInChildren<ISceneStateSerializable>(true);
+            foreach (var serializable in serializableObjects)
             {
-                if (obj.scene.name == sceneName)
+                string stateKey = serializable.GetStateKey();
+                if (!string.IsNullOrEmpty(stateKey) && state.ObjectStates.TryGetValue(stateKey, out object savedState))
                 {
-                    obj.SetActive(state.ActiveObjects.Contains(obj.name));
+                    serializable.LoadState(savedState);
                 }
             }
         }
@@ -134,40 +171,151 @@ public static class SceneHelper
     
     #region Scene Transitions
     
-    /// <summary>
-    /// Create a smooth fade transition between scenes
-    /// </summary>
-    public static async Task FadeTransitionAsync(float duration = 0.5f, Color? color = null)
+    private static CanvasGroup _fadeCanvas;
+
+    private static async Task FadeToBlack(float duration)
     {
-        var fadeColor = color ?? _defaultFadeColor;
-        
-        // Create fade overlay using UIHelper
-        var overlay = UIHelper.CreateOverlay(fadeColor);
-        
-        // Fade in
-        await overlay.GetComponent<CanvasGroup>().DOFade(1f, duration / 2).AsyncWaitForCompletion();
-        
-        await Task.Yield(); // Allow scene change to occur here
-        
-        // Fade out
-        await overlay.GetComponent<CanvasGroup>().DOFade(0f, duration / 2).AsyncWaitForCompletion();
-        
-        GameObject.Destroy(overlay);
+        var fadeScreen = CreateOrGetFadeScreen();
+        var canvasGroup = fadeScreen.GetComponent<CanvasGroup>();
+
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            canvasGroup.alpha = Mathf.Lerp(0f, 1f, elapsed / duration);
+            await Task.Yield();
+        }
+    }
+
+    private static async Task FadeFromBlack(float duration)
+    {
+        var fadeScreen = CreateOrGetFadeScreen();
+        var canvasGroup = fadeScreen.GetComponent<CanvasGroup>();
+
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            canvasGroup.alpha = Mathf.Lerp(1f, 0f, elapsed / duration);
+            await Task.Yield();
+        }
+
+        GameObject.Destroy(fadeScreen);
+    }
+
+    private static GameObject CreateOrGetFadeScreen()
+    {
+        var existing = GameObject.Find("SceneTransitionCanvas");
+        if (existing != null)
+            return existing;
+
+        var canvas = new GameObject("SceneTransitionCanvas", typeof(Canvas), typeof(CanvasGroup));
+        canvas.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.GetComponent<Canvas>().sortingOrder = 9999;
+
+        var image = new GameObject("FadeImage", typeof(Image));
+        image.transform.SetParent(canvas.transform, false);
+        image.GetComponent<Image>().color = _defaultFadeColor;
+        image.GetComponent<RectTransform>().sizeDelta = new Vector2(Screen.width * 1.5f, Screen.height * 1.5f);
+
+        GameObject.DontDestroyOnLoad(canvas);
+        return canvas;
     }
     
     #endregion
+    
+    #region Loading Screen
+
+    private static GameObject _loadingScreen;
+    private static Image _progressBar;
+    private static TextMeshProUGUI _progressText;
+
+    private static async Task ShowLoadingScreen()
+    {
+        _loadingScreen = CreateLoadingScreen();
+        var canvasGroup = _loadingScreen.GetComponent<CanvasGroup>();
+
+        float elapsed = 0f;
+        while (elapsed < _defaultFadeTime)
+        {
+            elapsed += Time.deltaTime;
+            canvasGroup.alpha = Mathf.Lerp(0f, 1f, elapsed / _defaultFadeTime);
+            await Task.Yield();
+        }
+    }
+
+    private static async Task HideLoadingScreen()
+    {
+        if (_loadingScreen == null) return;
+
+        var canvasGroup = _loadingScreen.GetComponent<CanvasGroup>();
+
+        float elapsed = 0f;
+        while (elapsed < _defaultFadeTime)
+        {
+            elapsed += Time.deltaTime;
+            canvasGroup.alpha = Mathf.Lerp(1f, 0f, elapsed / _defaultFadeTime);
+            await Task.Yield();
+        }
+
+        GameObject.Destroy(_loadingScreen);
+        _loadingScreen = null;
+    }
+
+    private static void UpdateLoadingProgress(float progress)
+    {
+        if (_progressBar != null)
+            _progressBar.fillAmount = progress;
+        
+        if (_progressText != null)
+            _progressText.text = $"{(progress * 100f):F0}%";
+    }
+
+    private static GameObject CreateLoadingScreen()
+    {
+        var canvas = new GameObject("LoadingScreen", typeof(Canvas), typeof(CanvasGroup));
+        canvas.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.GetComponent<Canvas>().sortingOrder = 10000;
+
+        var background = new GameObject("Background", typeof(Image));
+        background.transform.SetParent(canvas.transform, false);
+        background.GetComponent<Image>().color = _defaultFadeColor;
+        background.GetComponent<RectTransform>().sizeDelta = new Vector2(Screen.width * 1.5f, Screen.height * 1.5f);
+
+        var progressBarBg = new GameObject("ProgressBarBg", typeof(Image));
+        progressBarBg.transform.SetParent(canvas.transform, false);
+        progressBarBg.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f);
+        progressBarBg.GetComponent<RectTransform>().sizeDelta = new Vector2(500f, 20f);
+
+        var progressBarFill = new GameObject("ProgressBarFill", typeof(Image));
+        progressBarFill.transform.SetParent(progressBarBg.transform, false);
+        progressBarFill.GetComponent<Image>().color = Color.white;
+        progressBarFill.GetComponent<RectTransform>().sizeDelta = new Vector2(500f, 20f);
+        _progressBar = progressBarFill.GetComponent<Image>();
+
+        var progressText = new GameObject("ProgressText", typeof(TextMeshProUGUI));
+        progressText.transform.SetParent(canvas.transform, false);
+        var tmp = progressText.GetComponent<TextMeshProUGUI>();
+        tmp.fontSize = 24;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.color = Color.white;
+        _progressText = tmp;
+
+        GameObject.DontDestroyOnLoad(canvas);
+        return canvas;
+    }
+
+    #endregion
 
     #region Helper Classes
-    
-    /// <summary>
-    /// Stores the state of a scene for persistence
-    /// </summary>
-    private class SceneState
+      private class SceneState
     {
-        public DateTime TimeStamp { get; set; }
-        public Vector3 PlayerPosition { get; set; }
-        public List<string> ActiveObjects { get; set; }
-        public Dictionary<string, object> CustomData { get; set; } = new Dictionary<string, object>();
+        public Dictionary<string, object> ObjectStates = new Dictionary<string, object>();
+    }    public interface ISceneStateSerializable
+    {
+        string GetStateKey();
+        object SaveState();
+        void LoadState(object state);
     }
     
     #endregion
