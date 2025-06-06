@@ -1,8 +1,20 @@
 # UnityHelperSDK
 
-[![Unity](https://img.shields.io/badge/Unity-2020.3%2B-blue.svg)](https://unity.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]()
-[![Documentation](https://img.shields.io/badge/docs-read%20now-green.svg)](./Contents/)
+[![Unity](https://img.shields.io/badge/Unity-2021.3%2B-blue.svg)](https://unity.com/)
+[![.NET Standard](https://img.shields.io/badge/.NET-Standard%202.1-blueviolet.svg)](https://docs.microsoft.com/en-us/dotnet/standard/net-standard)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-read%20now-green.svg)](https://github.com/Karen-Najafzadeh/UnityHelperSDKDocumentation)
+[![C#](https://img.shields.io/badge/language-C%23-239120.svg)](https://docs.microsoft.com/en-us/dotnet/csharp/)
+[![Newtonsoft.Json](https://img.shields.io/badge/Newtonsoft.Json-supported-brightgreen.svg)](https://www.newtonsoft.com/json)
+[![Firebase](https://img.shields.io/badge/Firebase-supported-orange.svg)](https://firebase.google.com/)
+[![Firestore](https://img.shields.io/badge/Firestore-supported-orange.svg)](https://firebase.google.com/products/firestore)
+
+# Platforms 
+[![Windows](https://img.shields.io/badge/Windows-supported-blue.svg)](https://www.microsoft.com/windows/)
+[![macOS](https://img.shields.io/badge/macOS-supported-lightgrey.svg)](https://www.apple.com/macos/)
+[![Linux](https://img.shields.io/badge/Linux-supported-yellowgreen.svg)](https://www.linux.org/)
+[![Android](https://img.shields.io/badge/Android-supported-brightgreen.svg)](https://www.android.com/)
+[![iOS](https://img.shields.io/badge/iOS-supported-lightgrey.svg)](https://www.apple.com/ios/)
 
 A comprehensive collection of helper utilities and tools for Unity game development, designed to accelerate development workflow and provide robust, reusable solutions for common game development tasks.
 
