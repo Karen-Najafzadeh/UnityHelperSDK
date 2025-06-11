@@ -19,11 +19,14 @@ public class TypeAttribute : Attribute
 public enum GamePrefs
 {
     [Type("int")] Score,
+    [Type("int")] InterstitialCount,
+    [Type("int")] RewardedAdCount,
     [Type("string")] PlayerName,
     [Type("bool")] IsTutorialComplete,
     [Type("vector3")] LastPosition,
     [Type("color")] UIColor,
-    [Type("string")] ComplexData // For JSON-serialized objects
+    [Type("string")] AdsDateTimeComplexData, // For JSON-serialized objects
+    [Type("string")] PurchaseHistoryComplexData // For JSON-serialized objects
 }
 #endregion
 

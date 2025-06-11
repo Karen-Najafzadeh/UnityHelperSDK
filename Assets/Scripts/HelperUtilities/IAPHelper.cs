@@ -211,9 +211,9 @@ public class IAPHelper : MonoBehaviour, IDetailedStoreListener
             ["receipt"] = product.receipt
         };
 
-        var history = PrefsHelper.GetJson<List<Dictionary<string, object>>, GamePrefs>(GamePrefs.ComplexData) ?? new List<Dictionary<string, object>>();
+        var history = PrefsHelper.GetJson<List<Dictionary<string, object>>, GamePrefs>(GamePrefs.PurchaseHistoryComplexData) ?? new List<Dictionary<string, object>>();
         history.Add(purchaseInfo);
-        await PrefsHelper.SetJson(GamePrefs.ComplexData, history);
+        await PrefsHelper.SetJson(GamePrefs.PurchaseHistoryComplexData, history);
 
         _purchaseCache[product.definition.id] = (DateTime.UtcNow, true);
     }
@@ -223,7 +223,7 @@ public class IAPHelper : MonoBehaviour, IDetailedStoreListener
     /// </summary>
     public List<(DateTime date, string transactionId)> GetPurchaseHistory(string productId)
     {
-        var history = PrefsHelper.GetJson<List<Dictionary<string, object>>, GamePrefs>(GamePrefs.ComplexData);
+        var history = PrefsHelper.GetJson<List<Dictionary<string, object>>, GamePrefs>(GamePrefs.PurchaseHistoryComplexData);
         if (history == null) return new List<(DateTime, string)>();
 
         return history
