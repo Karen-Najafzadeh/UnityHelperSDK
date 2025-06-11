@@ -40,7 +40,7 @@ public static class EditorGUIHelper
     /// <summary>
     /// Initialize styles. Called automatically when needed.
     /// </summary>
-    private static void InitializeStyles()
+    public static void InitializeStyles()
     {
         if (_stylesInitialized) return;
         
