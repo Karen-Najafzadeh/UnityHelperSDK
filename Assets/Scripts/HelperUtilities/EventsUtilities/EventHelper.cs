@@ -6,7 +6,7 @@ using System.Linq;
 using System.Threading;
 using UnityHelperSDK;
 
-namespace UnityHelperSDK
+namespace UnityHelperSDK.Events
 {
     /// <summary>
     /// Component that can be added to any GameObject to manage event subscriptions

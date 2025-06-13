@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using System;
 
-namespace UnityHelperSDK
+namespace UnityHelperSDK.Events
 {
 
     /// <summary>
