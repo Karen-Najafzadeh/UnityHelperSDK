@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
 
-namespace UnityHelperSDK
+namespace UnityHelperSDK.Tutorial
 {
     /// <summary>
     /// A centralized repository for managing game tutorials.

@@ -1,4 +1,4 @@
-namespace UnityHelperSDK
+namespace UnityHelperSDK.Tutorial
 {
     /// <summary>
     /// Types of conditions that can be used in tutorials

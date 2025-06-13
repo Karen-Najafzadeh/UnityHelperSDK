@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace UnityHelperSDK
+namespace UnityHelperSDK.Tutorial
 {
     /// <summary>
     /// Represents a sequence of tutorial steps with their conditions

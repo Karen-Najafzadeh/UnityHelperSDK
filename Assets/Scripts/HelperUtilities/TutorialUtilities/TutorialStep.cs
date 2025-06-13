@@ -3,7 +3,7 @@ using UnityEngine.Events;
 using System;
 using System.Collections.Generic;
 
-namespace UnityHelperSDK
+namespace UnityHelperSDK.Tutorial
 {
     /// <summary>
     /// Represents a single step in a tutorial sequence

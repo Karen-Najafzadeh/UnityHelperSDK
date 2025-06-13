@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace UnityHelperSDK
+namespace UnityHelperSDK.Tutorial
 {
     /// <summary>
     /// Data structure for tutorial conditions that can be serialized

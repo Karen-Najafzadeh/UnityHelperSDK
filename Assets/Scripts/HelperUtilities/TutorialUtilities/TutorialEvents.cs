@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace UnityHelperSDK
+namespace UnityHelperSDK.Tutorial
 {
     /// <summary>
     /// Contains all tutorial-related event definitions.

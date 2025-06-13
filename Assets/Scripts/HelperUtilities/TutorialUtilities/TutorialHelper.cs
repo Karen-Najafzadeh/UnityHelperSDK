@@ -8,7 +8,7 @@ using System.Linq;
 using TMPro;
 using DG.Tweening;
 
-namespace UnityHelperSDK 
+namespace UnityHelperSDK.Tutorial
 {
     /// <summary>
     /// A comprehensive tutorial system that handles complex, multi-step tutorials
