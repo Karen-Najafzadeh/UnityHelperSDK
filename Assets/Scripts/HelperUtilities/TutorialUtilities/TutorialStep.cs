@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using System;
 using System.Collections.Generic;
+using UnityHelperSDK.Events;
 
 namespace UnityHelperSDK.Tutorial
 {

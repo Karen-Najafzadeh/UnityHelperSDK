@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Linq;
 using TMPro;
 using DG.Tweening;
+using UnityHelperSDK.Events;
 
 namespace UnityHelperSDK.Tutorial
 {
