@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace UnityHelperSDK.Editor
@@ -22,9 +23,8 @@ namespace UnityHelperSDK.Editor
         [SerializeField]
         private int requiredLevel;
         [SerializeField]
-        private List<string> dependencies = new List<string>();
-        [SerializeField]
-        private List<string> startConditions = new List<string>();
+        private List<string> dependencies = new List<string>();        [SerializeField]
+        private List<TutorialConditionData> startConditions = new List<TutorialConditionData>();
         [SerializeField]
         private List<TutorialStepData> steps = new List<TutorialStepData>();
 
@@ -34,9 +34,8 @@ namespace UnityHelperSDK.Editor
         public string Title => title;
         public string Description => description;
         public bool OnlyShowOnce => onlyShowOnce;
-        public int RequiredLevel => requiredLevel;
-        public List<string> Dependencies => dependencies;
-        public List<string> StartConditions => startConditions;
+        public int RequiredLevel => requiredLevel;        public List<string> Dependencies => dependencies;
+        public List<TutorialConditionData> StartConditions => startConditions;
         public List<TutorialStepData> Steps => steps;
 
         public void Initialize(string newId, string catId, string newTitle = "", string newDescription = "", int reqLevel = 1, bool showOnce = true)
@@ -61,13 +60,14 @@ namespace UnityHelperSDK.Editor
                 OnlyShowOnce = onlyShowOnce,
                 RequiredLevel = requiredLevel,
                 Dependencies = dependencies ?? new List<string>(),
-                StartConditions = startConditions ?? new List<string>(),
+                StartConditions = startConditions?.Select(c => c.eventId).ToList() ?? new List<string>(),
                 Steps = steps?.ConvertAll(s => new TutorialRepository.TutorialStepData
                 {
                     Id = s.id,
                     DialogueKey = s.dialogueKey,
-                    Conditions = s.conditions,
-                    CompletionCondition = s.completionCondition
+                    TargetObject = s.targetObject,
+                    Conditions = s.conditions?.Select(c => c.eventId).ToList() ?? new List<string>(),
+                    CompletionCondition = s.completionCondition?.eventId
                 }) ?? new List<TutorialRepository.TutorialStepData>()
             };
         }
@@ -83,13 +83,25 @@ namespace UnityHelperSDK.Editor
             definition.onlyShowOnce = data.OnlyShowOnce;
             definition.requiredLevel = data.RequiredLevel;
             definition.dependencies = data.Dependencies ?? new List<string>();
-            definition.startConditions = data.StartConditions ?? new List<string>();
+            definition.startConditions = data.StartConditions?.Select(eventId => new TutorialConditionData 
+            { 
+                eventId = eventId,
+                conditionType = TutorialConditionType.Start 
+            }).ToList() ?? new List<TutorialConditionData>();
             definition.steps = data.Steps?.ConvertAll(s => new TutorialStepData
             {
                 id = s.Id,
                 dialogueKey = s.DialogueKey,
-                conditions = s.Conditions,
-                completionCondition = s.CompletionCondition
+                conditions = s.Conditions?.Select(eventId => new TutorialConditionData 
+                { 
+                    eventId = eventId,
+                    conditionType = TutorialConditionType.Step 
+                }).ToList() ?? new List<TutorialConditionData>(),
+                completionCondition = !string.IsNullOrEmpty(s.CompletionCondition) ? new TutorialConditionData
+                {
+                    eventId = s.CompletionCondition,
+                    conditionType = TutorialConditionType.Step
+                } : null
             }) ?? new List<TutorialStepData>();
             return definition;
         }
@@ -157,9 +169,43 @@ namespace UnityHelperSDK.Editor
     [Serializable]
     public class TutorialStepData
     {
+        [SerializeField]
         public string id;
+        [SerializeField]
         public string dialogueKey;
-        public List<string> conditions;
-        public string completionCondition;
+
+        [SerializeField]
+        public GameObject targetObject;
+
+        [SerializeField]
+        public List<TutorialConditionData> conditions = new List<TutorialConditionData>();
+
+        [SerializeField]
+        public TutorialConditionData completionCondition;
+    }
+
+    [Serializable]
+    public class TutorialConditionData
+    {
+        [SerializeField]
+        public string eventId;
+        
+        [SerializeField]
+        public TutorialConditionType conditionType;
+
+        [SerializeField]
+        public string[] parameters;
+
+        public object[] GetParameterValues()
+        {
+            return parameters?.Select(p => (object)p).ToArray() ?? Array.Empty<object>();
+        }
+    }
+
+    public enum TutorialConditionType
+    {
+        Start,
+        Step,
+        Custom
     }
 }
