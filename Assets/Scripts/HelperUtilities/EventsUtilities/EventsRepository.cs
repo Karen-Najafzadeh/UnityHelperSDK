@@ -10,6 +10,7 @@ namespace UnityHelperSDK
     /// /// Each event is represented as a struct with relevant data fields.
     /// /// Events are categorized for better organization and management.
     /// Feel free to extend this class with additional events as needed.
+    /// For more examples, refer to the TutorialEvents.cs file.
     /// </summary>
     
     #region Event Categories

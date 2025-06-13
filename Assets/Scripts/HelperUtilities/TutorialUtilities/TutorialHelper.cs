@@ -40,7 +40,7 @@ namespace UnityHelperSDK
         /// <summary>
         /// Initialize the tutorial system
         /// </summary>
-        public static async Task Initialize()
+        public static void Initialize()
         {
             _tutorials.Clear();
             _activeTutorial = null;
