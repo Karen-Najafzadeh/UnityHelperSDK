@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityHelperSDK;
 
 namespace UnityHelperSDK.Editor
 {
@@ -23,7 +24,8 @@ namespace UnityHelperSDK.Editor
         [SerializeField]
         private int requiredLevel;
         [SerializeField]
-        private List<string> dependencies = new List<string>();        [SerializeField]
+        private List<string> dependencies = new List<string>();
+        [SerializeField] 
         private List<TutorialConditionData> startConditions = new List<TutorialConditionData>();
         [SerializeField]
         private List<TutorialStepData> steps = new List<TutorialStepData>();
@@ -34,7 +36,8 @@ namespace UnityHelperSDK.Editor
         public string Title => title;
         public string Description => description;
         public bool OnlyShowOnce => onlyShowOnce;
-        public int RequiredLevel => requiredLevel;        public List<string> Dependencies => dependencies;
+        public int RequiredLevel => requiredLevel;
+        public List<string> Dependencies => dependencies;
         public List<TutorialConditionData> StartConditions => startConditions;
         public List<TutorialStepData> Steps => steps;
 
@@ -57,17 +60,34 @@ namespace UnityHelperSDK.Editor
             {
                 Id = id,
                 CategoryId = categoryId,
+                Title = title,
+                Description = description,
                 OnlyShowOnce = onlyShowOnce,
                 RequiredLevel = requiredLevel,
-                Dependencies = dependencies ?? new List<string>(),
-                StartConditions = startConditions?.Select(c => c.eventId).ToList() ?? new List<string>(),
+                Dependencies = dependencies,
+                StartConditions = startConditions?.ConvertAll(c => new TutorialRepository.TutorialConditionData
+                {
+                    EventId = c.eventId,
+                    ConditionType = c.conditionType,
+                    Parameters = c.parameters
+                }) ?? new List<TutorialRepository.TutorialConditionData>(),
                 Steps = steps?.ConvertAll(s => new TutorialRepository.TutorialStepData
                 {
                     Id = s.id,
                     DialogueKey = s.dialogueKey,
                     TargetObject = s.targetObject,
-                    Conditions = s.conditions?.Select(c => c.eventId).ToList() ?? new List<string>(),
-                    CompletionCondition = s.completionCondition?.eventId
+                    Conditions = s.conditions?.ConvertAll(c => new TutorialRepository.TutorialConditionData
+                    {
+                        EventId = c.eventId,
+                        ConditionType = c.conditionType,
+                        Parameters = c.parameters
+                    }) ?? new List<TutorialRepository.TutorialConditionData>(),
+                    CompletionCondition = s.completionCondition != null ? new TutorialRepository.TutorialConditionData
+                    {
+                        EventId = s.completionCondition.eventId,
+                        ConditionType = s.completionCondition.conditionType,
+                        Parameters = s.completionCondition.parameters
+                    } : null
                 }) ?? new List<TutorialRepository.TutorialStepData>()
             };
         }
@@ -80,27 +100,33 @@ namespace UnityHelperSDK.Editor
             var definition = CreateInstance<TutorialDefinition>();
             definition.id = data.Id;
             definition.categoryId = data.CategoryId;
+            definition.title = data.Title;
+            definition.description = data.Description;
             definition.onlyShowOnce = data.OnlyShowOnce;
             definition.requiredLevel = data.RequiredLevel;
             definition.dependencies = data.Dependencies ?? new List<string>();
-            definition.startConditions = data.StartConditions?.Select(eventId => new TutorialConditionData 
-            { 
-                eventId = eventId,
-                conditionType = TutorialConditionType.Start 
-            }).ToList() ?? new List<TutorialConditionData>();
+            definition.startConditions = data.StartConditions?.ConvertAll(c => new TutorialConditionData
+            {
+                eventId = c.EventId,
+                conditionType = c.ConditionType,
+                parameters = c.Parameters
+            }) ?? new List<TutorialConditionData>();
             definition.steps = data.Steps?.ConvertAll(s => new TutorialStepData
             {
                 id = s.Id,
                 dialogueKey = s.DialogueKey,
-                conditions = s.Conditions?.Select(eventId => new TutorialConditionData 
-                { 
-                    eventId = eventId,
-                    conditionType = TutorialConditionType.Step 
-                }).ToList() ?? new List<TutorialConditionData>(),
-                completionCondition = !string.IsNullOrEmpty(s.CompletionCondition) ? new TutorialConditionData
+                targetObject = s.TargetObject,
+                conditions = s.Conditions?.ConvertAll(c => new TutorialConditionData
                 {
-                    eventId = s.CompletionCondition,
-                    conditionType = TutorialConditionType.Step
+                    eventId = c.EventId,
+                    conditionType = c.ConditionType,
+                    parameters = c.Parameters
+                }) ?? new List<TutorialConditionData>(),
+                completionCondition = s.CompletionCondition != null ? new TutorialConditionData
+                {
+                    eventId = s.CompletionCondition.EventId,
+                    conditionType = s.CompletionCondition.ConditionType,
+                    parameters = s.CompletionCondition.Parameters
                 } : null
             }) ?? new List<TutorialStepData>();
             return definition;
@@ -191,7 +217,7 @@ namespace UnityHelperSDK.Editor
         public string eventId;
         
         [SerializeField]
-        public TutorialConditionType conditionType;
+        public UnityHelperSDK.TutorialConditionType conditionType;
 
         [SerializeField]
         public string[] parameters;
