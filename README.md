@@ -20,17 +20,30 @@ A comprehensive collection of helper utilities and tools for Unity game developm
 
 ## 🚀 Features
 
-- **Event System**
-  - Priority-based event handling
-  - Event chaining support
-  - Coroutine integration
-  - Thread-safe implementation
-  - Automatic cleanup
-  - UI event integration
+### 🎮 Event System
+- Priority-based event handling with critical to background priorities
+- Event chaining for complex sequences
+- Coroutine integration for time-based events
+- Thread-safe implementation
+- Automatic cleanup with GameObject lifecycle
+- UI event integration
+- Type-safe event definitions
 
-- **More Coming Soon**
-  - Additional utility systems and tools will be added regularly
-  - Community contributions are most welcome!
+### 📚 Tutorial System
+- Visual editor for tutorial creation and management
+- Event-driven progression system
+- Condition-based tutorial steps
+- Category organization
+- UI highlighting and guidance
+- Analytics tracking
+- Dependency management
+- Step-by-step tutorials with branching
+
+For detailed usage instructions, see the [Tutorial System Guide](#tutorial-system) and [Event System Guide](#event-system) below.
+
+### 🔄 More Coming Soon
+- Additional utility systems and tools will be added regularly
+- Community contributions are most welcome!
 
 ## 📋 Requirements
 
@@ -56,9 +69,8 @@ Or add the following to your `manifest.json`:
 
 ## 📚 Documentation
 
-For detailed documentation, examples, and API references, please visit our dedicated documentation repository:
+For API references and additional examples, visit our documentation repository:
 [UnityHelperSDK Documentation](https://github.com/Karen-Najafzadeh/UnityHelperSDKDocumentation)
-
 
 ## 🤝 Contributing
 
