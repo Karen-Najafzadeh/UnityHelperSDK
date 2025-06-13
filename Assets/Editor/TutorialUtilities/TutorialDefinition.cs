@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using UnityHelperSDK;
+using UnityHelperSDK.Tutorial;
 
 namespace UnityHelperSDK.Editor
 {
@@ -217,7 +217,7 @@ namespace UnityHelperSDK.Editor
         public string eventId;
         
         [SerializeField]
-        public UnityHelperSDK.TutorialConditionType conditionType;
+        public UnityHelperSDK.Tutorial.TutorialConditionType conditionType;
 
         [SerializeField]
         public string[] parameters;
