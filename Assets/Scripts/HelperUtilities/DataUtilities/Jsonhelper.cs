@@ -28,6 +28,10 @@ using UnityEditor;
 /// featuring serialization, deserialization, file I/O, schema validation,
 /// diff/merge, HTTP requests, Firestore integration, and more.
 /// </summary>
+
+namespace UnityHelperSDK.Data{
+
+
 public static class JsonHelper
     {
         //--------------------------------------------------------------------------------
@@ -480,4 +484,4 @@ public static class JsonHelper
             return json;
         }
     }
-
+}
