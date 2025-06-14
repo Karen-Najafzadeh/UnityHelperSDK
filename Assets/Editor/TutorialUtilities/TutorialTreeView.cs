@@ -147,20 +147,12 @@ namespace UnityHelperSDK.Editor
                 Debug.Log($"tree view selection: Selected item: {item.GetType().Name} - {item}");
             }
             var selectedItem = items.FirstOrDefault() as TutorialItemData;
-            // if (selectedItem is int index)
-            // {
-                // Debug.Log($"tree view selection: Selected index {index}");
-                var itemData = selectedItem;//_treeView.GetItemDataForIndex<TutorialItemData>(index);
-                if (itemData != null)
-                {
-                    Debug.Log($"tree view selection: Selected item - displayName: {itemData.displayName}, categoryId: {itemData.categoryId}, tutorialId: {itemData.tutorialId}");
-                    // Invoke with both IDs, letting the handler determine what to do based on which one is empty
-                    OnTutorialSelectionChanged?.Invoke(itemData.categoryId, itemData.tutorialId);
-                // }
-                // else
-                // {
-                //     Debug.Log("tree view selection: No item data found for selected index");
-                // }
+            var itemData = selectedItem;
+            if (itemData != null)
+            {
+                Debug.Log($"tree view selection: Selected item - displayName: {itemData.displayName}, categoryId: {itemData.categoryId}, tutorialId: {itemData.tutorialId}");
+                // Invoke with both IDs, letting the handler determine what to do based on which one is empty
+                OnTutorialSelectionChanged?.Invoke(itemData.categoryId, itemData.tutorialId);
             }
             else
             {
