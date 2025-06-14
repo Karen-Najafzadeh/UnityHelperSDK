@@ -6,6 +6,7 @@ using Firebase;
 using Firebase.Extensions;
 using Firebase.Firestore;
 using System.Linq;
+using UnityHelperSDK.HelperUtilities;
 
 /// <summary>
 /// A comprehensive Firebase helper class that integrates Firestore operations with JsonHelper and NetworkRequestManager.

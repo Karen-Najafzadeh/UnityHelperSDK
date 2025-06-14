@@ -6,6 +6,7 @@ using System.Linq;
 using UnityEngine.UIElements;
 using UnityEditor.UIElements;
 using UnityHelperSDK.Input;
+using UnityHelperSDK.HelperUtilities;
 
 public class GestureEditorWindow : EditorWindow
 {

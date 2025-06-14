@@ -3,6 +3,10 @@ using UnityEditor;
 using System;
 using System.Collections.Generic;
 
+
+namespace UnityHelperSDK.HelperUtilities{
+
+
 #if UNITY_EDITOR
 
 /// <summary>
@@ -356,3 +360,4 @@ public static class EditorGUIHelper
 }
 
 #endif
+}

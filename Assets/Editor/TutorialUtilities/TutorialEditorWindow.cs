@@ -109,68 +109,53 @@ namespace UnityHelperSDK.Editor
         
         private void DrawInspector()
         {
-            Debug.Log("[TutorialEditorWindow] drawInspector DrawInspector called.");
+
 
             // If a tutorial is selected
             if (!string.IsNullOrEmpty(_selectedTutorial))
             {
-            Debug.Log($"[TutorialEditorWindow] drawInspector Selected tutorial: {_selectedTutorial}");
-            if (_tutorials.TryGetValue(_selectedTutorial, out var tutorial))
-            {
-                // Show parent category information in a foldout
-                if (_categories.TryGetValue(_selectedCategory, out var category))
+                if (_tutorials.TryGetValue(_selectedTutorial, out var tutorial))
                 {
-                Debug.Log($"[TutorialEditorWindow] drawInspector Tutorial's category: {_selectedCategory}");
-                using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
-                {
-                    EditorGUILayout.LabelField("Category:", GUILayout.Width(70));
-                    EditorGUILayout.LabelField(category.Name, EditorStyles.boldLabel);
-                }
-                EditorGUILayout.Space();
-                }
+                    // Show parent category information in a foldout
+                    if (_categories.TryGetValue(_selectedCategory, out var category))
+                    {
+                    using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+                    {
+                        EditorGUILayout.LabelField("Category:", GUILayout.Width(70));
+                        EditorGUILayout.LabelField(category.Name, EditorStyles.boldLabel);
+                    }
+                    EditorGUILayout.Space();
+                    }
 
-                // Draw the tutorial inspector
-                DrawTutorialInspector(tutorial);
-            }
-            else
-            {
-                Debug.LogWarning($"[TutorialEditorWindow] drawInspector Tutorial not found: {_selectedTutorial}");
-            }
+                    // Draw the tutorial inspector
+                    DrawTutorialInspector(tutorial);
+                }
             }
             // If only a category is selected
             else if (!string.IsNullOrEmpty(_selectedCategory))
             {
-            Debug.Log($"[TutorialEditorWindow] drawInspector Selected category: {_selectedCategory}");
-            if (_categories.TryGetValue(_selectedCategory, out var category))
-            {
-                DrawCategoryInspector(category);
-            }
-            else
-            {
-                Debug.LogWarning($"[TutorialEditorWindow] drawInspector Category not found: {_selectedCategory}");
-            }
-            }
-            else if (string.IsNullOrEmpty(_selectedCategory) && string.IsNullOrEmpty(_selectedTutorial))
-            {
-            Debug.Log("[TutorialEditorWindow] drawInspector Nothing selected.");
-            EditorGUILayout.HelpBox("Select a tutorial or category to edit", MessageType.Info);
-            return;
+                if (_categories.TryGetValue(_selectedCategory, out var category))
+                {
+                    DrawCategoryInspector(category);
+                }
+                }
+                else if (string.IsNullOrEmpty(_selectedCategory) && string.IsNullOrEmpty(_selectedTutorial))
+                {
+                EditorGUILayout.HelpBox("Select a tutorial or category to edit", MessageType.Info);
+                return;
             }
 
-            Debug.Log("[TutorialEditorWindow] drawInspector Drawing scroll view.");
             _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
 
             EditorGUILayout.EndScrollView();
 
             if (_isDirty)
             {
-            Debug.Log("[TutorialEditorWindow] drawInspector Changes detected, showing Save Changes button.");
             EditorGUILayout.Space();
             EditorGUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("Save Changes", GUILayout.Width(120)))
             {
-                Debug.Log("[TutorialEditorWindow] drawInspector Save Changes button clicked.");
                 SaveTutorialData();
             }
             EditorGUILayout.EndHorizontal();
