@@ -26,7 +26,7 @@ namespace UnityHelperSDK.Editor
         private TutorialTreeView _treeView;
         private IMGUIContainer _inspectorContainer;
 
-        [MenuItem("Window/Tutorial Editor")]
+        [MenuItem("Unity Helper SDK/Tutorial Editor")]
         public static void ShowWindow()
         {
             var window = GetWindow<TutorialEditorWindow>();
@@ -73,47 +73,107 @@ namespace UnityHelperSDK.Editor
             toolbar.Add(addTutorialButton);
 
             root.Insert(0, toolbar);
-        }
-
+        }        
         private void OnTutorialSelected(string categoryId, string tutorialId)
         {
-            _selectedCategory = categoryId;
-            _selectedTutorial = tutorialId;
-            _inspectorContainer?.MarkDirtyRepaint();
-        }
+            Debug.Log($"[TutorialEditorWindow] OnTutorialSelected - Category: {categoryId}, Tutorial: {tutorialId}");
+            
+            // Clear previous selection first
+            _selectedCategory = null;
+            _selectedTutorial = null;
 
-        private void DrawInspector()
-        {
-            if (string.IsNullOrEmpty(_selectedCategory) && string.IsNullOrEmpty(_selectedTutorial))
+            // Update selection based on what was clicked
+            if (!string.IsNullOrEmpty(tutorialId) && _tutorials.ContainsKey(tutorialId))
             {
-                EditorGUILayout.HelpBox("Select a tutorial or category to edit", MessageType.Info);
-                return;
+                // A tutorial was selected - verify it exists and get its category
+                var tutorial = _tutorials[tutorialId];
+                _selectedTutorial = tutorialId;
+                _selectedCategory = tutorial.CategoryId; // Use the category from the tutorial itself
+                Debug.Log($"[TutorialEditorWindow] Selected tutorial {tutorialId} in category {_selectedCategory}");
+            }
+            else if (!string.IsNullOrEmpty(categoryId) && _categories.ContainsKey(categoryId))
+            {
+                // A category was selected - verify it exists
+                _selectedCategory = categoryId;
+                Debug.Log($"[TutorialEditorWindow] Selected category {categoryId}");
+            }
+            else
+            {
+                Debug.Log("[TutorialEditorWindow] Nothing valid was selected");
             }
 
-            _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
+            // Force the inspector to repaint
+            _inspectorContainer?.MarkDirtyRepaint();
+            Repaint();
+        }
+        
+        private void DrawInspector()
+        {
+            Debug.Log("[TutorialEditorWindow] drawInspector DrawInspector called.");
 
-            if (!string.IsNullOrEmpty(_selectedCategory) && _categories.TryGetValue(_selectedCategory, out var category))
+            // If a tutorial is selected
+            if (!string.IsNullOrEmpty(_selectedTutorial))
+            {
+            Debug.Log($"[TutorialEditorWindow] drawInspector Selected tutorial: {_selectedTutorial}");
+            if (_tutorials.TryGetValue(_selectedTutorial, out var tutorial))
+            {
+                // Show parent category information in a foldout
+                if (_categories.TryGetValue(_selectedCategory, out var category))
+                {
+                Debug.Log($"[TutorialEditorWindow] drawInspector Tutorial's category: {_selectedCategory}");
+                using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+                {
+                    EditorGUILayout.LabelField("Category:", GUILayout.Width(70));
+                    EditorGUILayout.LabelField(category.Name, EditorStyles.boldLabel);
+                }
+                EditorGUILayout.Space();
+                }
+
+                // Draw the tutorial inspector
+                DrawTutorialInspector(tutorial);
+            }
+            else
+            {
+                Debug.LogWarning($"[TutorialEditorWindow] drawInspector Tutorial not found: {_selectedTutorial}");
+            }
+            }
+            // If only a category is selected
+            else if (!string.IsNullOrEmpty(_selectedCategory))
+            {
+            Debug.Log($"[TutorialEditorWindow] drawInspector Selected category: {_selectedCategory}");
+            if (_categories.TryGetValue(_selectedCategory, out var category))
             {
                 DrawCategoryInspector(category);
             }
-
-            if (!string.IsNullOrEmpty(_selectedTutorial) && _tutorials.TryGetValue(_selectedTutorial, out var tutorial))
+            else
             {
-                DrawTutorialInspector(tutorial);
+                Debug.LogWarning($"[TutorialEditorWindow] drawInspector Category not found: {_selectedCategory}");
             }
+            }
+            else if (string.IsNullOrEmpty(_selectedCategory) && string.IsNullOrEmpty(_selectedTutorial))
+            {
+            Debug.Log("[TutorialEditorWindow] drawInspector Nothing selected.");
+            EditorGUILayout.HelpBox("Select a tutorial or category to edit", MessageType.Info);
+            return;
+            }
+
+            Debug.Log("[TutorialEditorWindow] drawInspector Drawing scroll view.");
+            _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
 
             EditorGUILayout.EndScrollView();
 
             if (_isDirty)
             {
-                EditorGUILayout.Space();
-                EditorGUILayout.BeginHorizontal();
-                GUILayout.FlexibleSpace();
-                if (GUILayout.Button("Save Changes", GUILayout.Width(120)))
-                {
-                    SaveTutorialData();
-                }
-                EditorGUILayout.EndHorizontal();
+            Debug.Log("[TutorialEditorWindow] drawInspector Changes detected, showing Save Changes button.");
+            EditorGUILayout.Space();
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Save Changes", GUILayout.Width(120)))
+            {
+                Debug.Log("[TutorialEditorWindow] drawInspector Save Changes button clicked.");
+                SaveTutorialData();
+            }
+            EditorGUILayout.EndHorizontal();
             }
         }
 
@@ -315,100 +375,106 @@ namespace UnityHelperSDK.Editor
                 serializedObject.ApplyModifiedProperties();
                 _isDirty = true;
             }
-        }
-
+        }        
         private void LoadTutorialData()
         {
             try
             {
-                _categories = new Dictionary<string, TutorialCategory>();
-                _tutorials = new Dictionary<string, TutorialDefinition>();
+            Debug.Log("[TutorialEditorWindow] Loading tutorial data...");
 
-                var tutorialJson = JsonHelper.DeserializeFromFile(Path.Combine(Application.dataPath, "Resources/Tutorials/tutorial_definitions.json"));
-                var categoryJson = JsonHelper.DeserializeFromFile(Path.Combine(Application.dataPath, "Resources/Tutorials/tutorial_categories.json"));
+            // Ensure the tutorials directory exists
+            if (!AssetDatabase.IsValidFolder(TUTORIALS_PATH))
+            {
+                var parentPath = System.IO.Path.GetDirectoryName(TUTORIALS_PATH);
+                var folderName = System.IO.Path.GetFileName(TUTORIALS_PATH);
+                Debug.Log($"[TutorialEditorWindow] Creating tutorials folder at: {TUTORIALS_PATH}");
+                AssetDatabase.CreateFolder(parentPath, folderName);
+                AssetDatabase.Refresh();
+            }
 
-                // Convert runtime data to editor format
-                if (tutorialJson != null)
+            _categories = new Dictionary<string, TutorialCategory>();
+            _tutorials = new Dictionary<string, TutorialDefinition>();
+
+            // Load all TutorialCategory assets
+            string[] categoryGuids = AssetDatabase.FindAssets("t:TutorialCategory", new[] { TUTORIALS_PATH });
+            Debug.Log($"[TutorialEditorWindow] Found {categoryGuids.Length} TutorialCategory assets.");
+            foreach (string guid in categoryGuids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var category = AssetDatabase.LoadAssetAtPath<TutorialCategory>(path);
+                if (category != null && !string.IsNullOrEmpty(category.Id))
                 {
-                    var tutorialData = JsonHelper.Deserialize<Dictionary<string, TutorialRepository.TutorialData>>(JsonHelper.Serialize(tutorialJson));
-                    foreach (var kvp in tutorialData)
-                    {
-                        var tutorial = TutorialDefinition.FromRuntimeData(kvp.Value);
-                        var path = Path.Combine(TUTORIALS_PATH, $"{tutorial.Id}.asset");
-                        var existingTutorial = AssetDatabase.LoadAssetAtPath<TutorialDefinition>(path);
-                        if (existingTutorial == null)
-                        {
-                            AssetDatabase.CreateAsset(tutorial, path);
-                        }
-                        else
-                        {
-                            EditorUtility.CopySerializedIfDifferent(tutorial, existingTutorial);
-                        }
-                        _tutorials[tutorial.Id] = tutorial;
-                    }
+                _categories[category.Id] = category;
+                Debug.Log($"[TutorialEditorWindow] Loaded category: {category.Id} ({category.Name})");
                 }
-
-                if (categoryJson != null)
+                else
                 {
-                    var categoryData = JsonHelper.Deserialize<Dictionary<string, TutorialRepository.TutorialCategoryData>>(JsonHelper.Serialize(categoryJson));
-                    foreach (var kvp in categoryData)
-                    {
-                        var category = TutorialCategory.FromRuntimeData(kvp.Value);
-                        var path = Path.Combine(TUTORIALS_PATH, $"{category.Id}.asset");
-                        var existingCategory = AssetDatabase.LoadAssetAtPath<TutorialCategory>(path);
-                        if (existingCategory == null)
-                        {
-                            AssetDatabase.CreateAsset(category, path);
-                        }
-                        else
-                        {
-                            EditorUtility.CopySerializedIfDifferent(category, existingCategory);
-                        }
-                        _categories[category.Id] = category;
-                    }
+                Debug.LogWarning($"[TutorialEditorWindow] Skipped invalid or unnamed category at path: {path}");
                 }
+            }
 
-                AssetDatabase.SaveAssets();
-                _isDirty = false;
-                _treeView?.Refresh(_categories, _tutorials);
+            // Load all TutorialDefinition assets
+            string[] tutorialGuids = AssetDatabase.FindAssets("t:TutorialDefinition", new[] { TUTORIALS_PATH });
+            Debug.Log($"[TutorialEditorWindow] Found {tutorialGuids.Length} TutorialDefinition assets.");
+            foreach (string guid in tutorialGuids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var tutorial = AssetDatabase.LoadAssetAtPath<TutorialDefinition>(path);
+                if (tutorial != null && !string.IsNullOrEmpty(tutorial.Id))
+                {
+                _tutorials[tutorial.Id] = tutorial;
+                Debug.Log($"[TutorialEditorWindow] Loaded tutorial: {tutorial.Id} ({tutorial.Title})");
+                }
+                else
+                {
+                Debug.LogWarning($"[TutorialEditorWindow] Skipped invalid or unnamed tutorial at path: {path}");
+                }
+            }
+
+            // Clear selection when loading new data
+            _selectedCategory = null;
+            _selectedTutorial = null;
+            
+            _isDirty = false;
+            
+            // Refresh the tree view with the loaded data
+            if (_treeView != null)
+            {
+                Debug.Log("[TutorialEditorWindow] Refreshing tree view.");
+                _treeView.Refresh(_categories, _tutorials);
+            }
+            
+            Repaint();
+            Debug.Log("[TutorialEditorWindow] Tutorial data loaded successfully.");
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Error loading tutorial data: {ex.Message}");
+            Debug.LogError($"Error loading tutorial data: {ex.Message}\n{ex.StackTrace}");
             }
-        }
-
+        }    
         private void SaveTutorialData()
         {
             if (!_isDirty)
                 return;
 
-            // Ensure directory exists
-            if (!Directory.Exists(TUTORIALS_PATH))
-            {
-                Directory.CreateDirectory(TUTORIALS_PATH);
-            }
-
-            // Save categories
+            // Ensure all assets are properly saved
             foreach (var category in _categories.Values)
             {
-                string assetPath = $"{TUTORIALS_PATH}/Category_{category.Id}.asset";
-                AssetDatabase.CreateAsset(category, assetPath);
+                EditorUtility.SetDirty(category);
             }
 
-            // Save tutorials
             foreach (var tutorial in _tutorials.Values)
             {
-                string assetPath = $"{TUTORIALS_PATH}/Tutorial_{tutorial.Id}.asset";
-                AssetDatabase.CreateAsset(tutorial, assetPath);
+                EditorUtility.SetDirty(tutorial);
             }
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             
             _isDirty = false;
-            _treeView.Refresh(_categories, _tutorials);
+            _treeView?.Refresh(_categories, _tutorials);
             Debug.Log("Tutorial data saved successfully!");
+            Repaint();
         }
 
         private void AddNewCategory()

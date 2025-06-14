@@ -136,18 +136,35 @@ namespace UnityHelperSDK.Editor
             // Set the items source
             _treeView.SetRootItems(_items);
             _treeView.Rebuild();
-        }
-
+        }        
         private void OnTreeSelectionChanged(IEnumerable<object> items)
         {
-            var selectedItem = items.FirstOrDefault();
-            if (selectedItem is int index)
+            Debug.Log("tree view selection: Selection changed");
+            Debug.Log($"tree view selection: Selected items count: {items.Count()}");
+            Debug.Log($"tree view selection: Selected items: {string.Join(", ", items.Select(i => i.ToString()))}");
+            foreach (var item in items)
             {
-                var itemData = _treeView.GetItemDataForIndex<TutorialItemData>(index);
-                if (itemData != null && !string.IsNullOrEmpty(itemData.tutorialId))
+                Debug.Log($"tree view selection: Selected item: {item.GetType().Name} - {item}");
+            }
+            var selectedItem = items.FirstOrDefault() as TutorialItemData;
+            // if (selectedItem is int index)
+            // {
+                // Debug.Log($"tree view selection: Selected index {index}");
+                var itemData = selectedItem;//_treeView.GetItemDataForIndex<TutorialItemData>(index);
+                if (itemData != null)
                 {
+                    Debug.Log($"tree view selection: Selected item - displayName: {itemData.displayName}, categoryId: {itemData.categoryId}, tutorialId: {itemData.tutorialId}");
+                    // Invoke with both IDs, letting the handler determine what to do based on which one is empty
                     OnTutorialSelectionChanged?.Invoke(itemData.categoryId, itemData.tutorialId);
-                }
+                // }
+                // else
+                // {
+                //     Debug.Log("tree view selection: No item data found for selected index");
+                // }
+            }
+            else
+            {
+            Debug.Log("tree view selection: Selected item is not an int index");
             }
         }
 

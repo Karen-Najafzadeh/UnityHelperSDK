@@ -21,7 +21,7 @@ public class GestureEditorWindow : EditorWindow
     private string _searchQuery = "";
     private GestureType _typeFilter = GestureType.All;
 
-    [MenuItem("Window/Gesture Editor")]
+    [MenuItem("Unity Helper SDK/Gesture Editor")]
     public static void ShowWindow()
     {
         var window = GetWindow<GestureEditorWindow>();

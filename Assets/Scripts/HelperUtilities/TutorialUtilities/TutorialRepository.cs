@@ -221,7 +221,8 @@ namespace UnityHelperSDK.Tutorial
         {
             // TODO: Implement this based on your game's level system
             return 1;
-        }        protected virtual void CreateTutorialSequence(TutorialData data)
+        }        
+        protected virtual void CreateTutorialSequence(TutorialData data)
         {
             var sequence = new TutorialSequence(data.Id, data.OnlyShowOnce, data.RequiredLevel, data.CategoryId);
 
