@@ -7,6 +7,7 @@ using UnityEngine;
 using UnityEngine.Purchasing;
 using UnityEngine.Purchasing.Security;
 using UnityEngine.Purchasing.Extension;
+using UnityHelperSDK.Data;
 
 /// <summary>
 /// IAPHelper: Singleton manager for Unity In-App Purchases
