@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace HelperUtilities.DesignPatterns
+namespace UnityHelperSDK.DesignPatterns
 {
     /// <summary>
     /// A generic state machine implementation that handles state transitions and updates

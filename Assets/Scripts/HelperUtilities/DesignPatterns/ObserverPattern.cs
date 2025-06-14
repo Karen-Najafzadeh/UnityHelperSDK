@@ -2,9 +2,9 @@ using System;
 using System.Collections;
 using System.Threading.Tasks;
 using UnityEngine;
-using UnityHelperSDK;
+using UnityHelperSDK.Events;
 
-namespace HelperUtilities.DesignPatterns
+namespace UnityHelperSDK.DesignPatterns
 {
     /// <summary>
     /// Generic observer pattern implementation that integrates with Unity's event system.

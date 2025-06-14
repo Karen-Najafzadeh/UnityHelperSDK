@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace HelperUtilities.DesignPatterns
+namespace UnityHelperSDK.DesignPatterns
 {
     /// <summary>
     /// A generic interface for defining strategies

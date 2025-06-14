@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace HelperUtilities.DesignPatterns
+namespace UnityHelperSDK.DesignPatterns
 {
     /// <summary>
     /// Interface defining a state's behavior

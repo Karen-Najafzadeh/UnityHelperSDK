@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace HelperUtilities.DesignPatterns
+namespace UnityHelperSDK.DesignPatterns
 {
     /// <summary>
     /// Generic factory pattern implementation that manages object creation with integrated pooling support
