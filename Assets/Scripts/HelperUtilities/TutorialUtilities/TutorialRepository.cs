@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
 using UnityHelperSDK.Events;
+using UnityHelperSDK.Data;
 
 namespace UnityHelperSDK.Tutorial
 {

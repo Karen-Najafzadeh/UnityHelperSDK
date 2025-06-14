@@ -14,7 +14,7 @@ namespace UnityHelperSDK.Assets.Editor
         private bool _showGroups = true;
         private Dictionary<string, bool> _groupFoldouts = new Dictionary<string, bool>();
 
-        [MenuItem("Window/UnityHelperSDK/Addressable Manager")]
+        [MenuItem("Unity Helper SDK/Addressable Manager")]
         public static void ShowWindow()
         {
             var window = GetWindow<AddressableManagerWindow>("Addressable Manager");

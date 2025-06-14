@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityHelperSDK.Data;
 #if UNITY_ADS
 using UnityEngine.Advertisements;
 #endif

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityHelperSDK.Assets;
+using UnityHelperSDK.Data;
 
 /// <summary>
 /// A comprehensive local storage helper that provides easy data persistence,
