@@ -139,13 +139,6 @@ namespace UnityHelperSDK.Editor
         }        
         private void OnTreeSelectionChanged(IEnumerable<object> items)
         {
-            Debug.Log("tree view selection: Selection changed");
-            Debug.Log($"tree view selection: Selected items count: {items.Count()}");
-            Debug.Log($"tree view selection: Selected items: {string.Join(", ", items.Select(i => i.ToString()))}");
-            foreach (var item in items)
-            {
-                Debug.Log($"tree view selection: Selected item: {item.GetType().Name} - {item}");
-            }
             var selectedItem = items.FirstOrDefault() as TutorialItemData;
             var itemData = selectedItem;
             if (itemData != null)
