@@ -9,61 +9,48 @@ namespace UnityHelperSDK.Editor{
 
 
     /// <summary>
-    /// ScriptableObject wrapper for runtime TutorialCategoryData
+    /// Serializable class for storing tutorial category data
     /// </summary>
-    public class TutorialCategory : ScriptableObject
+    [Serializable]
+public class TutorialCategory
+{
+    public string Id { get; set; }
+    public string Name { get; set; }
+    public string Description { get; set; }
+    public int SortOrder { get; set; }
+    public List<string> TutorialIds { get; set; } = new();
+
+    public TutorialCategory() { }
+
+    public void Initialize(string newId, string newName = "", string newDescription = "", int order = 0)
     {
-        [SerializeField]
-        private string id;
-        [SerializeField]
-        private string displayName;
-        [SerializeField]
-        private string description;
-        [SerializeField]
-        private int sortOrder;
-        [SerializeField]
-        private List<string> tutorialIds = new List<string>();
-
-        // Public properties
-        public string Id => id;
-        public string Name => displayName;
-        public string Description => description;
-        public int SortOrder => sortOrder;
-        public List<string> TutorialIds => tutorialIds;
-
-        public void Initialize(string newId, string newName = "", string newDescription = "", int order = 0)
-        {
-            id = newId;
-            displayName = newName;
-            description = newDescription;
-            sortOrder = order;
-        }
-
-        /// <summary>
-        /// Convert this ScriptableObject to runtime TutorialCategoryData
-        /// </summary>
-        public TutorialRepository.TutorialCategoryData ToRuntimeData()
-        {
-            return new TutorialRepository.TutorialCategoryData
-            {
-                Id = id,
-                Name = displayName,
-                Description = description,
-                Order = sortOrder
-            };
-        }
-
-        /// <summary>
-        /// Create a new TutorialCategory from runtime TutorialCategoryData
-        /// </summary>
-        public static TutorialCategory FromRuntimeData(TutorialRepository.TutorialCategoryData data)
-        {
-            var category = CreateInstance<TutorialCategory>();
-            category.id = data.Id;
-            category.displayName = data.Name;
-            category.description = data.Description;
-            category.sortOrder = data.Order;
-            return category;
-        }
+        Id = newId;
+        Name = newName;
+        Description = newDescription;
+        SortOrder = order;
     }
+
+    public UnityHelperSDK.Tutorial.TutorialRepository.TutorialCategoryData ToRuntimeData()
+    {
+        return new UnityHelperSDK.Tutorial.TutorialRepository.TutorialCategoryData
+        {
+            Id = Id,
+            Name = Name,
+            Description = Description,
+            Order = SortOrder
+        };
+    }
+
+    public static TutorialCategory FromRuntimeData(UnityHelperSDK.Tutorial.TutorialRepository.TutorialCategoryData data)
+    {
+        return new TutorialCategory
+        {
+            Id = data.Id,
+            Name = data.Name,
+            Description = data.Description,
+            SortOrder = data.Order
+        };
+    }
+}
+
 }

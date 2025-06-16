@@ -119,6 +119,12 @@ namespace UnityHelperSDK.Tutorial
         private Dictionary<string, TutorialSequence> _activeSequences;
         private HashSet<string> _completedTutorials;
 
+        // Public accessors
+        public IReadOnlyDictionary<string, TutorialData> TutorialDefinitions => _tutorialDefinitions;
+        public IReadOnlyDictionary<string, TutorialCategoryData> Categories => _categories;
+        public IReadOnlyDictionary<string, TutorialSequence> ActiveSequences => _activeSequences;
+        public IReadOnlyCollection<string> CompletedTutorials => _completedTutorials;
+
         // Events
         public event Action<string> OnTutorialRegistered;
         public event Action<string> OnTutorialUnregistered;
@@ -154,7 +160,7 @@ namespace UnityHelperSDK.Tutorial
                 var json = await LoadTutorialJson();
                 if (!string.IsNullOrEmpty(json))
                 {
-                    var data = JsonHelper.Deserialize<Dictionary<string, TutorialData>>(json);
+                    var data = UnityHelperSDK.Data.JsonHelper.Deserialize<Dictionary<string, TutorialData>>(json);
                     if (data != null)
                     {
                         _tutorialDefinitions = data;
@@ -168,7 +174,7 @@ namespace UnityHelperSDK.Tutorial
                 json = await LoadCategoryJson();
                 if (!string.IsNullOrEmpty(json))
                 {
-                    _categories = JsonHelper.Deserialize<Dictionary<string, TutorialCategoryData>>(json);
+                    _categories = UnityHelperSDK.Data.JsonHelper.Deserialize<Dictionary<string, TutorialCategoryData>>(json);
                 }
             }
             catch (Exception e)
@@ -196,7 +202,7 @@ namespace UnityHelperSDK.Tutorial
             {
                 try
                 {
-                    var completed = JsonHelper.Deserialize<List<string>>(json);
+                    var completed = UnityHelperSDK.Data.JsonHelper.Deserialize<List<string>>(json);
                     _completedTutorials = new HashSet<string>(completed);
                 }
                 catch (Exception e)
@@ -209,7 +215,7 @@ namespace UnityHelperSDK.Tutorial
 
         private void SaveProgress()
         {
-            var json = JsonHelper.Serialize(_completedTutorials.ToList());
+            var json = UnityHelperSDK.Data.JsonHelper.Serialize(_completedTutorials.ToList());
             PlayerPrefs.SetString("CompletedTutorials", json);
             PlayerPrefs.Save();
         }

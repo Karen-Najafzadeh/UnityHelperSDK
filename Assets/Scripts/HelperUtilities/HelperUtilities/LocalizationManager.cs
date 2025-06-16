@@ -631,7 +631,7 @@ namespace UnityHelperSDK.HelperUtilities{
             {
                 try
                 {
-                    return JsonHelper.Deserialize<Dictionary<string, string>>(textAsset.text);
+                    return UnityHelperSDK.Data.JsonHelper.Deserialize<Dictionary<string, string>>(textAsset.text);
                 }
                 catch (Exception e)
                 {

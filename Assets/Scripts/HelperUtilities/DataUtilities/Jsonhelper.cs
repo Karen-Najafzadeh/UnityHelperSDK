@@ -162,8 +162,7 @@ public static class JsonHelper
         public static void MergeJson(JObject dest, JObject src)
         {
             dest.Merge(src, new JsonMergeSettings {
-                MergeArrayHandling = MergeArrayHandling.Concat,
-                MergeNullValueHandling = MergeNullValueHandling.Ignore
+                MergeArrayHandling = MergeArrayHandling.Concat
             });
         }
 

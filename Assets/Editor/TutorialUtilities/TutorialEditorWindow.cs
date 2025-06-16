@@ -7,6 +7,8 @@ using UnityEngine.UIElements;
 using UnityEditor.UIElements;
 using System;
 using UnityHelperSDK.Tutorial;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace UnityHelperSDK.Editor
 {
@@ -167,24 +169,22 @@ namespace UnityHelperSDK.Editor
             EditorGUILayout.LabelField("Category Settings", EditorStyles.boldLabel);
             EditorGUI.BeginChangeCheck();
 
-            SerializedObject serializedObject = new SerializedObject(category);
-            serializedObject.Update();
-
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("displayName"), new GUIContent("Name"));
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("description"));
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("sortOrder"));
+            // Direct field editing instead of using SerializedObject
+            string newName = EditorGUILayout.TextField("Name", category.Name);
+            string newDescription = EditorGUILayout.TextField("Description", category.Description);
+            int newSortOrder = EditorGUILayout.IntField("Sort Order", category.SortOrder);
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Tutorials in Category", EditorStyles.boldLabel);
 
-            SerializedProperty tutorialIdsProperty = serializedObject.FindProperty("tutorialIds");
-            if (tutorialIdsProperty.arraySize > 0)
+            var tutorialIds = category.TutorialIds;
+            if (tutorialIds.Count > 0)
             {
                 EditorGUI.indentLevel++;
-                for (int i = 0; i < tutorialIdsProperty.arraySize; i++)
+                for (int i = 0; i < tutorialIds.Count; i++)
                 {
                     EditorGUILayout.BeginHorizontal();
-                    var tutorialId = tutorialIdsProperty.GetArrayElementAtIndex(i).stringValue;
+                    var tutorialId = tutorialIds[i];
                     if (_tutorials.TryGetValue(tutorialId, out var tutorial))
                     {
                         EditorGUILayout.LabelField($"{i + 1}. {tutorial.Title}");
@@ -196,8 +196,7 @@ namespace UnityHelperSDK.Editor
                     
                     if (GUILayout.Button("Remove", GUILayout.Width(60)))
                     {
-                        // Remove from category
-                        tutorialIdsProperty.DeleteArrayElementAtIndex(i);
+                        tutorialIds.RemoveAt(i);
                         _isDirty = true;
                         break;
                     }
@@ -217,28 +216,23 @@ namespace UnityHelperSDK.Editor
                     "Are you sure you want to delete this category? This will not delete the tutorials in it.", 
                     "Delete", "Cancel"))
                 {
-                    // Delete the category asset
-                    var path = Path.Combine(TUTORIALS_PATH, $"{category.Id}.asset");
-                    AssetDatabase.DeleteAsset(path);
-                    
-                    // Remove from dictionary
                     _categories.Remove(category.Id);
-                    
-                    // Clear selection
                     _selectedCategory = null;
                     _selectedTutorial = null;
-                    
-                    // Mark dirty and refresh
                     _isDirty = true;
                     _treeView?.Refresh(_categories, _tutorials);
                     return;
                 }
             }
 
-            if (EditorGUI.EndChangeCheck() || serializedObject.hasModifiedProperties)
+            if (EditorGUI.EndChangeCheck())
             {
-                serializedObject.ApplyModifiedProperties();
-                _isDirty = true;
+                // Update category fields if changed
+                if (newName != category.Name || newDescription != category.Description || newSortOrder != category.SortOrder)
+                {
+                    category.Initialize(category.Id, newName, newDescription, newSortOrder);
+                    _isDirty = true;
+                }
             }
         }
 
@@ -247,32 +241,28 @@ namespace UnityHelperSDK.Editor
             EditorGUILayout.LabelField("Tutorial Settings", EditorStyles.boldLabel);
             EditorGUI.BeginChangeCheck();
 
-            SerializedObject serializedObject = new SerializedObject(tutorial);
-            serializedObject.Update();
-
             EditorGUI.BeginDisabledGroup(true);
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("id"));
+            EditorGUILayout.TextField("ID", tutorial.Id);
             EditorGUI.EndDisabledGroup();
 
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("title"));
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("description"));
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("requiredLevel"));
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("onlyShowOnce"));
+            string newTitle = EditorGUILayout.TextField("Title", tutorial.Title);
+            string newDescription = EditorGUILayout.TextField("Description", tutorial.Description);
+            int newRequiredLevel = EditorGUILayout.IntField("Required Level", tutorial.RequiredLevel);
+            bool newOnlyShowOnce = EditorGUILayout.Toggle("Only Show Once", tutorial.OnlyShowOnce);
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Dependencies", EditorStyles.boldLabel);
-            SerializedProperty dependenciesProperty = serializedObject.FindProperty("dependencies");
             
-            if (dependenciesProperty.arraySize > 0)
+            var dependencies = tutorial.Dependencies;
+            if (dependencies.Count > 0)
             {
                 EditorGUI.indentLevel++;
-                for (int i = 0; i < dependenciesProperty.arraySize; i++)
+                for (int i = 0; i < dependencies.Count; i++)
                 {
                     EditorGUILayout.BeginHorizontal();
-                    var dependencyId = dependenciesProperty.GetArrayElementAtIndex(i).stringValue;
-                    if (_tutorials.TryGetValue(dependencyId, out var dependentTutorial))
+                    if (_tutorials.TryGetValue(dependencies[i], out var depTutorial))
                     {
-                        EditorGUILayout.LabelField($"{i + 1}. {dependentTutorial.Title}");
+                        EditorGUILayout.LabelField($"{i + 1}. {depTutorial.Title}");
                     }
                     else
                     {
@@ -281,7 +271,7 @@ namespace UnityHelperSDK.Editor
                     
                     if (GUILayout.Button("Remove", GUILayout.Width(60)))
                     {
-                        dependenciesProperty.DeleteArrayElementAtIndex(i);
+                        dependencies.RemoveAt(i);
                         _isDirty = true;
                         break;
                     }
@@ -290,175 +280,458 @@ namespace UnityHelperSDK.Editor
                 EditorGUI.indentLevel--;
             }
 
-            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Start Conditions", EditorStyles.boldLabel);
+
+            var startConditions = tutorial.StartConditions;
+            if (startConditions.Count > 0)
+            {
+                EditorGUI.indentLevel++;
+                for (int i = 0; i < startConditions.Count; i++)
+                {
+                    EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                              var condition = startConditions[i];
+            condition.EventId = EditorGUILayout.TextField("Event ID", condition.EventId);
+            condition.ConditionType = (UnityHelperSDK.Tutorial.TutorialConditionType)EditorGUILayout.EnumPopup("Condition Type", condition.ConditionType);
+                    
+                    EditorGUILayout.LabelField("Parameters");
+                    EditorGUI.indentLevel++;
+                    
+                    if (condition.Parameters == null)
+                        condition.Parameters = new string[0];
+                        
+                    for (int p = 0; p < condition.Parameters.Length; p++)
+                    {
+                        EditorGUILayout.BeginHorizontal();
+                        condition.Parameters[p] = EditorGUILayout.TextField($"Parameter {p + 1}", condition.Parameters[p]);
+                        if (GUILayout.Button("-", GUILayout.Width(20)))
+                        {
+                            var newParams = condition.Parameters.ToList();
+                            newParams.RemoveAt(p);
+                            condition.Parameters = newParams.ToArray();
+                            _isDirty = true;
+                            break;
+                        }
+                        EditorGUILayout.EndHorizontal();
+                    }
+                    
+                    if (GUILayout.Button("Add Parameter"))
+                    {
+                        var newParams = condition.Parameters.ToList();
+                        newParams.Add("");
+                        condition.Parameters = newParams.ToArray();
+                        _isDirty = true;
+                    }
+                    
+                    EditorGUI.indentLevel--;
+                    
+                    if (GUILayout.Button("Remove Condition"))
+                    {
+                        startConditions.RemoveAt(i);
+                        _isDirty = true;
+                        break;
+                    }
+                    
+                    EditorGUILayout.EndVertical();
+                }
+                EditorGUI.indentLevel--;
+            }
+
+            if (GUILayout.Button("Add Start Condition"))
+            {
+                startConditions.Add(new TutorialConditionData 
+                { 
+                    EventId = "", 
+                    ConditionType = UnityHelperSDK.Tutorial.TutorialConditionType.Start,
+                    Parameters = new string[0]
+                });
+                _isDirty = true;
+            }
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Tutorial Steps", EditorStyles.boldLabel);
+
+            var steps = tutorial.Steps;
+            if (steps.Count > 0)
+            {
+                EditorGUI.indentLevel++;
+                for (int i = 0; i < steps.Count; i++)
+                {
+                    EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                    
+                    var step = steps[i];
+                    step.Id = EditorGUILayout.TextField("Step ID", step.Id);
+                    step.DialogueKey = EditorGUILayout.TextField("Dialogue Key", step.DialogueKey);
+                    step.TargetObject = EditorGUILayout.ObjectField("Target Object", step.TargetObject, typeof(GameObject), true) as GameObject;
+
+                    EditorGUILayout.Space();
+                    EditorGUILayout.LabelField("Step Conditions", EditorStyles.boldLabel);
+                    
+                    if (step.Conditions == null)
+                        step.Conditions = new List<TutorialConditionData>();
+
+                    for (int c = 0; c < step.Conditions.Count; c++)
+                    {
+                        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                        var condition = step.Conditions[c];
+                        condition.EventId = EditorGUILayout.TextField("Event ID", condition.EventId);
+                        condition.ConditionType = (UnityHelperSDK.Tutorial.TutorialConditionType)EditorGUILayout.EnumPopup("Condition Type", condition.ConditionType);
+                        
+                        EditorGUILayout.LabelField("Parameters");
+                        EditorGUI.indentLevel++;
+                        
+                        if (condition.Parameters == null)
+                            condition.Parameters = new string[0];
+                            
+                        for (int p = 0; p < condition.Parameters.Length; p++)
+                        {
+                            EditorGUILayout.BeginHorizontal();
+                            condition.Parameters[p] = EditorGUILayout.TextField($"Parameter {p + 1}", condition.Parameters[p]);
+                            if (GUILayout.Button("-", GUILayout.Width(20)))
+                            {
+                                var newParams = condition.Parameters.ToList();
+                                newParams.RemoveAt(p);
+                                condition.Parameters = newParams.ToArray();
+                                _isDirty = true;
+                                break;
+                            }
+                            EditorGUILayout.EndHorizontal();
+                        }
+                        
+                        if (GUILayout.Button("Add Parameter"))
+                        {
+                            var newParams = condition.Parameters.ToList();
+                            newParams.Add("");
+                            condition.Parameters = newParams.ToArray();
+                            _isDirty = true;
+                        }
+                        
+                        EditorGUI.indentLevel--;
+                        
+                        if (GUILayout.Button("Remove Condition"))
+                        {
+                            step.Conditions.RemoveAt(c);
+                            _isDirty = true;
+                            break;
+                        }
+                        
+                        EditorGUILayout.EndVertical();
+                    }
+
+                    if (GUILayout.Button("Add Step Condition"))
+                    {                step.Conditions.Add(new TutorialConditionData 
+                { 
+                    EventId = "", 
+                    ConditionType = UnityHelperSDK.Tutorial.TutorialConditionType.Step,
+                    Parameters = new string[0]
+                });
+                        _isDirty = true;
+                    }
+
+                    EditorGUILayout.Space();
+                    EditorGUILayout.LabelField("Completion Condition", EditorStyles.boldLabel);
+                    
+                    if (step.CompletionCondition == null)
+                    {
+                        if (GUILayout.Button("Add Completion Condition"))
+                        {                    step.CompletionCondition = new TutorialConditionData 
+                    { 
+                        EventId = "", 
+                        ConditionType = UnityHelperSDK.Tutorial.TutorialConditionType.Step,
+                        Parameters = new string[0]
+                    };
+                            _isDirty = true;
+                        }
+                    }
+                    else
+                    {
+                        var completion = step.CompletionCondition;
+                        completion.EventId = EditorGUILayout.TextField("Event ID", completion.EventId);
+                        completion.ConditionType = (UnityHelperSDK.Tutorial.TutorialConditionType)EditorGUILayout.EnumPopup("Condition Type", completion.ConditionType);
+                        
+                        EditorGUILayout.LabelField("Parameters");
+                        EditorGUI.indentLevel++;
+                        
+                        if (completion.Parameters == null)
+                            completion.Parameters = new string[0];
+                            
+                        for (int p = 0; p < completion.Parameters.Length; p++)
+                        {
+                            EditorGUILayout.BeginHorizontal();
+                            completion.Parameters[p] = EditorGUILayout.TextField($"Parameter {p + 1}", completion.Parameters[p]);
+                            if (GUILayout.Button("-", GUILayout.Width(20)))
+                            {
+                                var newParams = completion.Parameters.ToList();
+                                newParams.RemoveAt(p);
+                                completion.Parameters = newParams.ToArray();
+                                _isDirty = true;
+                                break;
+                            }
+                            EditorGUILayout.EndHorizontal();
+                        }
+                        
+                        if (GUILayout.Button("Add Parameter"))
+                        {
+                            var newParams = completion.Parameters.ToList();
+                            newParams.Add("");
+                            completion.Parameters = newParams.ToArray();
+                            _isDirty = true;
+                        }
+                        
+                        EditorGUI.indentLevel--;
+                        
+                        if (GUILayout.Button("Remove Completion Condition"))
+                        {
+                            step.CompletionCondition = null;
+                            _isDirty = true;
+                        }
+                    }
+                    
+                    if (GUILayout.Button("Remove Step"))
+                    {
+                        steps.RemoveAt(i);
+                        _isDirty = true;
+                        break;
+                    }
+                    
+                    EditorGUILayout.EndVertical();
+                }
+                EditorGUI.indentLevel--;
+            }
+
+            if (GUILayout.Button("Add Step"))
+            {
+                steps.Add(new TutorialStepData 
+                { 
+                    Id = System.Guid.NewGuid().ToString(),
+                    DialogueKey = "",
+                    Conditions = new List<TutorialConditionData>()
+                });
+                _isDirty = true;
+            }
+
+            EditorGUILayout.Space();
             if (GUILayout.Button("Add Dependency"))
             {
-                var menu = new GenericMenu();
+                var dependencyMenu = new GenericMenu();
                 foreach (var kvp in _tutorials)
                 {
                     if (kvp.Key != tutorial.Id && !tutorial.Dependencies.Contains(kvp.Key))
                     {
-                        menu.AddItem(new GUIContent(kvp.Value.Title), false, () => {
-                            dependenciesProperty.arraySize++;
-                            dependenciesProperty.GetArrayElementAtIndex(dependenciesProperty.arraySize - 1).stringValue = kvp.Key;
-                            serializedObject.ApplyModifiedProperties();
+                        dependencyMenu.AddItem(new GUIContent(kvp.Value.Title), false, () =>
+                        {
+                            tutorial.Dependencies.Add(kvp.Key);
                             _isDirty = true;
                         });
                     }
                 }
-                menu.ShowAsContext();
+                dependencyMenu.ShowAsContext();
             }
-            EditorGUILayout.EndHorizontal();
 
-            EditorGUILayout.Space();
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("steps"));
-
-            EditorGUILayout.Space();
             if (GUILayout.Button("Delete Tutorial"))
             {
                 if (EditorUtility.DisplayDialog("Delete Tutorial", 
                     "Are you sure you want to delete this tutorial?", 
                     "Delete", "Cancel"))
                 {
-                    // Remove from any categories that reference it
-                    foreach (var category in _categories.Values)
+                    if (_categories.TryGetValue(tutorial.CategoryId, out var category))
                     {
-                        if (category.TutorialIds.Remove(tutorial.Id))
-                        {
-                            EditorUtility.SetDirty(category);
-                        }
+                        category.TutorialIds.Remove(tutorial.Id);
                     }
-
-                    // Remove from any tutorials that depend on it
-                    foreach (var otherTutorial in _tutorials.Values)
-                    {
-                        if (otherTutorial.Dependencies.Remove(tutorial.Id))
-                        {
-                            EditorUtility.SetDirty(otherTutorial);
-                        }
-                    }
-
-                    // Delete the asset
-                    var path = Path.Combine(TUTORIALS_PATH, $"{tutorial.Id}.asset");
-                    AssetDatabase.DeleteAsset(path);
-                    
-                    // Remove from dictionary
                     _tutorials.Remove(tutorial.Id);
-                    
-                    // Clear selection
+                    _selectedCategory = null;
                     _selectedTutorial = null;
-                    
-                    // Mark dirty and refresh
                     _isDirty = true;
                     _treeView?.Refresh(_categories, _tutorials);
                     return;
                 }
             }
 
-            if (EditorGUI.EndChangeCheck() || serializedObject.hasModifiedProperties)
+            if (EditorGUI.EndChangeCheck())
             {
-                serializedObject.ApplyModifiedProperties();
-                _isDirty = true;
+                if (newTitle != tutorial.Title || 
+                    newDescription != tutorial.Description || 
+                    newRequiredLevel != tutorial.RequiredLevel || 
+                    newOnlyShowOnce != tutorial.OnlyShowOnce)
+                {
+                    tutorial.Initialize(
+                        tutorial.Id,
+                        tutorial.CategoryId,
+                        newTitle,
+                        newDescription,
+                        newRequiredLevel,
+                        newOnlyShowOnce
+                    );
+                    _isDirty = true;
+                }
             }
-        }        
+        }          
         private void LoadTutorialData()
         {
+            Debug.Log("[TutorialEditorWindow] Entering LoadTutorialData()");
+
             try
             {
-            Debug.Log("[TutorialEditorWindow] Loading tutorial data...");
+                Debug.Log("[TutorialEditorWindow] Loading tutorial data...");
 
-            // Ensure the tutorials directory exists
-            if (!AssetDatabase.IsValidFolder(TUTORIALS_PATH))
-            {
-                var parentPath = System.IO.Path.GetDirectoryName(TUTORIALS_PATH);
-                var folderName = System.IO.Path.GetFileName(TUTORIALS_PATH);
-                Debug.Log($"[TutorialEditorWindow] Creating tutorials folder at: {TUTORIALS_PATH}");
-                AssetDatabase.CreateFolder(parentPath, folderName);
-                AssetDatabase.Refresh();
-            }
+                // Initialize empty collections
+                _categories = new Dictionary<string, TutorialCategory>();
+                _tutorials = new Dictionary<string, TutorialDefinition>();
 
-            _categories = new Dictionary<string, TutorialCategory>();
-            _tutorials = new Dictionary<string, TutorialDefinition>();
-
-            // Load all TutorialCategory assets
-            string[] categoryGuids = AssetDatabase.FindAssets("t:TutorialCategory", new[] { TUTORIALS_PATH });
-            Debug.Log($"[TutorialEditorWindow] Found {categoryGuids.Length} TutorialCategory assets.");
-            foreach (string guid in categoryGuids)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                var category = AssetDatabase.LoadAssetAtPath<TutorialCategory>(path);
-                if (category != null && !string.IsNullOrEmpty(category.Id))
+                // Ensure the tutorials directory exists
+                if (!Directory.Exists(TUTORIALS_PATH))
                 {
-                _categories[category.Id] = category;
-                Debug.Log($"[TutorialEditorWindow] Loaded category: {category.Id} ({category.Name})");
+                    Debug.Log($"[TutorialEditorWindow] Creating tutorials folder at: {TUTORIALS_PATH}");
+                    Directory.CreateDirectory(TUTORIALS_PATH);
                 }
                 else
                 {
-                Debug.LogWarning($"[TutorialEditorWindow] Skipped invalid or unnamed category at path: {path}");
+                    Debug.Log($"[TutorialEditorWindow] Tutorials folder exists at: {TUTORIALS_PATH}");
                 }
-            }
 
-            // Load all TutorialDefinition assets
-            string[] tutorialGuids = AssetDatabase.FindAssets("t:TutorialDefinition", new[] { TUTORIALS_PATH });
-            Debug.Log($"[TutorialEditorWindow] Found {tutorialGuids.Length} TutorialDefinition assets.");
-            foreach (string guid in tutorialGuids)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                var tutorial = AssetDatabase.LoadAssetAtPath<TutorialDefinition>(path);
-                if (tutorial != null && !string.IsNullOrEmpty(tutorial.Id))
+                // Load categories
+                var categoriesPath = Path.Combine(TUTORIALS_PATH, "categories.json");
+                Debug.Log($"[TutorialEditorWindow] Looking for categories at: {categoriesPath}");
+                if (File.Exists(categoriesPath))
                 {
-                _tutorials[tutorial.Id] = tutorial;
-                Debug.Log($"[TutorialEditorWindow] Loaded tutorial: {tutorial.Id} ({tutorial.Title})");
+                    Debug.Log($"[TutorialEditorWindow] Reading categories from: {categoriesPath}");
+                    string jsonContent = File.ReadAllText(categoriesPath);
+                    Debug.Log($"[TutorialEditorWindow] Categories JSON content: {jsonContent}");
+
+                    var settings = new JsonSerializerSettings
+                    {
+                        ContractResolver = new DefaultContractResolver(),
+                        Formatting = Formatting.Indented
+                    };
+
+                    var categories = JsonConvert.DeserializeObject<List<TutorialCategory>>(jsonContent);
+
+                    if (categories != null && categories.Count > 0)
+                    {
+                        foreach (var category in categories)
+                        {
+                            Debug.Log($"[TutorialEditorWindow] Processing category - Id: {category.Id}, Name: {category.Name} , Description: {category.Description} , SortOrder: {category.SortOrder} tutorials: {category.TutorialIds.Count}");
+                        }
+
+                        _categories = categories.ToDictionary(c => c.Id);
+                        Debug.Log($"[TutorialEditorWindow] Loaded {_categories.Count} categories successfully");
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[TutorialEditorWindow] No categories found in JSON file or deserialization returned null.");
+                    }
                 }
                 else
                 {
-                Debug.LogWarning($"[TutorialEditorWindow] Skipped invalid or unnamed tutorial at path: {path}");
+                    Debug.LogWarning($"[TutorialEditorWindow] Categories file does not exist at: {categoriesPath}");
                 }
-            }
 
-            // Clear selection when loading new data
-            _selectedCategory = null;
-            _selectedTutorial = null;
-            
-            _isDirty = false;
-            
-            // Refresh the tree view with the loaded data
-            if (_treeView != null)
-            {
-                Debug.Log("[TutorialEditorWindow] Refreshing tree view.");
-                _treeView.Refresh(_categories, _tutorials);
-            }
-            
-            Repaint();
-            Debug.Log("[TutorialEditorWindow] Tutorial data loaded successfully.");
+                // Load tutorials
+                var tutorialsPath = Path.Combine(TUTORIALS_PATH, "tutorials.json");
+                Debug.Log($"[TutorialEditorWindow] Looking for tutorials at: {tutorialsPath}");
+                if (File.Exists(tutorialsPath))
+                {
+                    Debug.Log($"[TutorialEditorWindow] Reading tutorials from: {tutorialsPath}");
+                    string jsonContent = File.ReadAllText(tutorialsPath);
+                    Debug.Log($"[TutorialEditorWindow] Tutorials JSON content: {jsonContent}");
+
+                    var settings = new JsonSerializerSettings
+                    {
+                        ContractResolver = new DefaultContractResolver(),
+                        Formatting = Formatting.Indented
+                    };
+                    var tutorials = JsonConvert.DeserializeObject<List<TutorialDefinition>>(jsonContent);
+
+                    if (tutorials != null && tutorials.Count > 0)
+                    {
+                        foreach (var tutorial in tutorials)
+                        {
+                            Debug.Log($"[TutorialEditorWindow] Processing tutorial - Id: {tutorial.Id}, CategoryId: {tutorial.CategoryId}, Title: {tutorial.Title}");
+
+                            if (string.IsNullOrEmpty(tutorial.CategoryId))
+                            {
+                                Debug.LogError($"[TutorialEditorWindow] Tutorial '{tutorial.Id}' has an invalid category ID '{tutorial.CategoryId}'. This will be skipped.");
+                                continue;
+                            }
+
+                            if (!_categories.ContainsKey(tutorial.CategoryId))
+                            {
+                                Debug.LogError($"[TutorialEditorWindow] Tutorial '{tutorial.Id}' references non-existent category '{tutorial.CategoryId}'. This will be skipped.");
+                                continue;
+                            }
+                        }
+
+                        _tutorials = tutorials.ToDictionary(t => t.Id);
+                        Debug.Log($"[TutorialEditorWindow] Loaded {_tutorials.Count} tutorials successfully");
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[TutorialEditorWindow] No tutorials found in JSON file or deserialization returned null.");
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning($"[TutorialEditorWindow] Tutorials file does not exist at: {tutorialsPath}");
+                }
+
+                // Clear selection when loading new data
+                Debug.Log("[TutorialEditorWindow] Clearing selection after loading data.");
+                _selectedCategory = null;
+                _selectedTutorial = null;
+
+                _isDirty = false;
+
+                // Refresh the tree view with the loaded data
+                if (_treeView != null)
+                {
+                    Debug.Log("[TutorialEditorWindow] Refreshing tree view.");
+                    _treeView.Refresh(_categories, _tutorials);
+                }
+
+                Repaint();
+                Debug.Log("[TutorialEditorWindow] Tutorial data loaded successfully.");
             }
             catch (Exception ex)
             {
-            Debug.LogError($"Error loading tutorial data: {ex.Message}\n{ex.StackTrace}");
+                Debug.LogError($"Error loading tutorial data: {ex.Message}\n{ex.StackTrace}");
             }
-        }    
+            Debug.Log("[TutorialEditorWindow] Exiting LoadTutorialData()");
+        }        
+        
         private void SaveTutorialData()
         {
             if (!_isDirty)
                 return;
 
-            // Ensure all assets are properly saved
-            foreach (var category in _categories.Values)
+            try
             {
-                EditorUtility.SetDirty(category);
-            }
+                // Ensure directory exists
+                if (!Directory.Exists(TUTORIALS_PATH))
+                {
+                    Directory.CreateDirectory(TUTORIALS_PATH);
+                }
 
-            foreach (var tutorial in _tutorials.Values)
+                // Save categories
+                var categoriesPath = Path.Combine(TUTORIALS_PATH, "categories.json");
+                var categoriesJson = UnityHelperSDK.Data.JsonHelper.Serialize(_categories.Values.ToList(), true);
+                File.WriteAllText(categoriesPath, categoriesJson);
+                
+                // Save tutorials
+                var tutorialsPath = Path.Combine(TUTORIALS_PATH, "tutorials.json");
+                var tutorialsJson = UnityHelperSDK.Data.JsonHelper.Serialize(_tutorials.Values.ToList(), true);
+                File.WriteAllText(tutorialsPath, tutorialsJson);
+                
+                _isDirty = false;
+                _treeView?.Refresh(_categories, _tutorials);
+                Debug.Log("[TutorialEditorWindow] Tutorial data saved successfully!");
+                AssetDatabase.Refresh();
+            }
+            catch (Exception ex)
             {
-                EditorUtility.SetDirty(tutorial);
+                Debug.LogError($"[TutorialEditorWindow] Error saving tutorial data: {ex.Message}");
+                EditorUtility.DisplayDialog("Error", "Failed to save tutorial data. Check the console for details.", "OK");
             }
-
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
             
-            _isDirty = false;
-            _treeView?.Refresh(_categories, _tutorials);
-            Debug.Log("Tutorial data saved successfully!");
             Repaint();
         }
 
@@ -472,16 +745,15 @@ namespace UnityHelperSDK.Editor
             }
 
             // Create new category
-            var category = CreateInstance<TutorialCategory>();
+            var category = new TutorialCategory();
             category.Initialize(newId, $"New Category {_categories.Count + 1}", "New category description", _categories.Count);
 
-            // Save the asset
-            var path = Path.Combine(TUTORIALS_PATH, $"{category.Id}.asset");
-            AssetDatabase.CreateAsset(category, path);
             _categories[category.Id] = category;
             
-            // Mark dirty and refresh
+            // Mark dirty and save
             _isDirty = true;
+            SaveTutorialData();
+            
             _selectedCategory = category.Id;
             _selectedTutorial = null;
             _treeView?.Refresh(_categories, _tutorials);
@@ -505,23 +777,21 @@ namespace UnityHelperSDK.Editor
             }
 
             // Create new tutorial
-            var tutorial = CreateInstance<TutorialDefinition>();
+            var tutorial = new TutorialDefinition();
             tutorial.Initialize(newId, selectedCategoryId, $"New Tutorial {_tutorials.Count + 1}", "Tutorial description");
 
-            // Save the asset
-            var path = Path.Combine(TUTORIALS_PATH, $"{tutorial.Id}.asset");
-            AssetDatabase.CreateAsset(tutorial, path);
             _tutorials[tutorial.Id] = tutorial;
 
             // Add to category
             if (_categories.TryGetValue(selectedCategoryId, out var category))
             {
                 category.TutorialIds.Add(tutorial.Id);
-                EditorUtility.SetDirty(category);
             }
 
-            // Mark dirty and refresh
+            // Mark dirty and save
             _isDirty = true;
+            SaveTutorialData();
+
             _selectedTutorial = tutorial.Id;
             _treeView?.Refresh(_categories, _tutorials);
         }

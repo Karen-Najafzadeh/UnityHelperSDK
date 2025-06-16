@@ -301,7 +301,7 @@ namespace UnityHelperSDK.HelperUtilities{
                     return (false, null);
 
                 return (
-                    info.isSubscribed() == Result.True,
+                    info.isSubscribed() == UnityEngine.Purchasing.Result.True,
                     info.getExpireDate()
                 );
             }
