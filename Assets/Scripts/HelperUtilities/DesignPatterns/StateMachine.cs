@@ -1,88 +1,140 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityHelperSDK.DesignPatterns;
 
 namespace UnityHelperSDK.DesignPatterns
 {
     /// <summary>
-    /// A generic state machine implementation that handles state transitions and updates
+    /// Enum-based state machine with fluent state configuration.
     /// </summary>
-    public class StateMachine<TState, TContext> where TState : IState<TContext>
+    public class StateMachine<TContext, TStateEnum> where TStateEnum : Enum
     {
-        private Dictionary<Type, TState> _states = new Dictionary<Type, TState>();
-        private TState _currentState;
-        private TContext _context;
-        
-        public TState CurrentState => _currentState;
+        private readonly Dictionary<TStateEnum, State> _states = new();
+        private State _current;
+        private readonly TContext _context;
+
+        public TStateEnum CurrentState => _current != null ? _current.Key : default;
 
         public StateMachine(TContext context)
         {
             _context = context;
         }
 
-        /// <summary>
-        /// Add a state to the state machine
-        /// </summary>
-        public void AddState<T>(T state) where T : TState
+        public StateBuilder DefineState(TStateEnum key)
         {
-            var type = typeof(T);
-            if (_states.ContainsKey(type))
+            if (_states.TryGetValue(key, out var existing))
             {
-                Debug.LogWarning($"State {type.Name} already exists in state machine");
-                return;
-            }
-            
-            _states[type] = state;
-        }
-
-        /// <summary>
-        /// Change to a new state
-        /// </summary>
-        public void ChangeState<T>() where T : TState
-        {
-            var type = typeof(T);
-            if (!_states.ContainsKey(type))
-            {
-                Debug.LogError($"State {type.Name} not found in state machine");
-                return;
+                Debug.LogWarning($"State '{key}' already defined");
+                return new StateBuilder(existing);
             }
 
-            _currentState?.OnExit(_context);
-            _currentState = _states[type];
-            _currentState.OnEnter(_context);
+            var state = new State(key, _context, this);
+            _states[key] = state;
+            return new StateBuilder(state);
         }
 
-        /// <summary>
-        /// Update the current state
-        /// </summary>
+        public void SetInitialState(TStateEnum key)
+        {
+            if (_states.TryGetValue(key, out var state))
+                TransitionTo(state);
+            else
+                Debug.LogError($"State '{key}' not defined");
+        }
+
+        public void TransitionTo(TStateEnum key)
+        {
+            if (_states.TryGetValue(key, out var state))
+                TransitionTo(state);
+            else
+                Debug.LogError($"State '{key}' not defined");
+        }
+
+        private void TransitionTo(State next)
+        {
+            _current?.OnExit();
+            _current = next;
+            _current.OnEnter();
+        }
+
         public void Update()
         {
-            _currentState?.OnUpdate(_context);
+            _current?.OnUpdate();
+        }
+
+        /// <summary>
+        /// Fluent builder for defining a state.
+        /// </summary>
+        public class StateBuilder
+        {
+            private readonly State _state;
+
+            public StateBuilder(State state) => _state = state;
+
+            public StateBuilder OnEnter(Action<TContext> action)
+            {
+                _state.EnterAction = action ?? (_ => { });
+                return this;
+            }
+
+            public StateBuilder OnUpdate(Action<TContext> action)
+            {
+                _state.UpdateAction = action ?? (_ => { });
+                return this;
+            }
+
+            public StateBuilder OnExit(Action<TContext> action)
+            {
+                _state.ExitAction = action ?? (_ => { });
+                return this;
+            }
+
+            public StateMachine<TContext, TStateEnum> EndState()
+            {
+                return _state.Machine;
+            }
+        }
+
+        public class State
+        {
+            public TStateEnum Key { get; }
+            public Action<TContext> EnterAction = _ => { };
+            public Action<TContext> UpdateAction = _ => { };
+            public Action<TContext> ExitAction = _ => { };
+
+            public StateMachine<TContext, TStateEnum> Machine { get; }
+            private readonly TContext _context;
+
+            public State(TStateEnum key, TContext context, StateMachine<TContext, TStateEnum> machine)
+            {
+                Key = key;
+                _context = context;
+                Machine = machine;
+            }
+
+            public void OnEnter() => EnterAction(_context);
+            public void OnUpdate() => UpdateAction(_context);
+            public void OnExit() => ExitAction(_context);
         }
     }
-
-    /// <summary>
-    /// Interface for states to be used with the state machine
-    /// </summary>
-    public interface IState<TContext>
-    {
-        void OnEnter(TContext context);
-        void OnUpdate(TContext context);
-        void OnExit(TContext context);
-    }
-
-    /// <summary>
-    /// Example usage:
-    /// 
-    /// public class GameState : IState<GameManager>
-    /// {
-    ///     public void OnEnter(GameManager context) { }
-    ///     public void OnUpdate(GameManager context) { }
-    ///     public void OnExit(GameManager context) { }
-    /// }
-    /// 
-    /// var stateMachine = new StateMachine<IState<GameManager>, GameManager>(gameManager);
-    /// stateMachine.AddState(new GameState());
-    /// stateMachine.ChangeState<GameState>();
-    /// </summary>
 }
+
+
+//Example usage
+//public enum PlayerState { Idle, Run, Jump }
+
+//var sm = new SimpleStateMachine<Player, PlayerState>(player);
+
+//sm.DefineState(PlayerState.Idle)
+//  .OnEnter(p => p.PlayIdle())
+//  .OnUpdate(p => { if (p.StartRun) sm.TransitionTo(PlayerState.Run); })
+//  .OnExit(p => p.StopIdle())
+//  .EndState();
+
+//sm.DefineState(PlayerState.Run)
+//  .OnEnter(p => p.PlayRun())
+//  .OnUpdate(p => { p.Move(); if (!p.IsMoving) sm.TransitionTo(PlayerState.Idle); })
+//  .OnExit(p => p.StopRun())
+//  .EndState();
+
+//sm.SetInitialState(PlayerState.Idle);

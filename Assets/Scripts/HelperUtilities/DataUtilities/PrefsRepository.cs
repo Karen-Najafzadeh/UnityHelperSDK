@@ -41,7 +41,9 @@ namespace UnityHelperSDK.Data{
         [Type("vector3")] LastPosition,
         [Type("color")] UIColor,
         [Type("string")] AdsDateTimeComplexData, // For JSON-serialized objects
-        [Type("string")] PurchaseHistoryComplexData // For JSON-serialized objects
+        [Type("string")] PurchaseHistoryComplexData, // For JSON-serialized objects
+        [Type("string")] DailyRewardLastClaimed,
+        [Type("int")] DailyRewardStreak,
     }
     #endregion
 }
