@@ -1,0 +1,160 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b8f77c44db6b6a448fcc86f9cb73122, type: 3}
+  m_Name: tutorial_1
+  m_EditorClassIdentifier: 
+  id: tutorial_1
+  categoryId: category_1
+  title: game initial
+  description: basics
+  onlyShowOnce: 1
+  requiredLevel: 1
+  dependencies: []
+  startConditions: []
+  steps:
+  - id: 1
+    dialogueKey: Hi. Welcome, my new captain! Bravo!
+    targetObject: {fileID: 0}
+    conditions: []
+    completionCondition:
+      eventId: 1
+      conditionType: 1
+      parameters: []
+  - id: 2
+    dialogueKey: Here is your new airport.Build and develop a vast aircraft fleet!
+    targetObject: {fileID: 0}
+    conditions: []
+    completionCondition:
+      eventId: 2
+      conditionType: 1
+      parameters: []
+  - id: 3
+    dialogueKey: 
+    targetObject: {fileID: 0}
+    conditions:
+    - eventId: 
+      conditionType: 0
+      parameters: []
+    completionCondition:
+      eventId: 3
+      conditionType: 1
+      parameters: []
+  - id: 4
+    dialogueKey: 
+    targetObject: {fileID: 0}
+    conditions:
+    - eventId: 
+      conditionType: 0
+      parameters: []
+    completionCondition:
+      eventId: 4
+      conditionType: 1
+      parameters: []
+  - id: 5
+    dialogueKey: Merge your planes to get better one!
+    targetObject: {fileID: 0}
+    conditions:
+    - eventId: 
+      conditionType: 0
+      parameters: []
+    completionCondition:
+      eventId: 5
+      conditionType: 1
+      parameters: []
+  - id: 6
+    dialogueKey: 
+    targetObject: {fileID: 0}
+    conditions:
+    - eventId: 
+      conditionType: 0
+      parameters: []
+    completionCondition:
+      eventId: 6
+      conditionType: 1
+      parameters: []
+  - id: 7
+    dialogueKey: Drag the planes into the flight path and earn money!
+    targetObject: {fileID: 0}
+    conditions:
+    - eventId: 
+      conditionType: 0
+      parameters: []
+    completionCondition:
+      eventId: 7
+      conditionType: 1
+      parameters: []
+  - id: 8
+    dialogueKey: 
+    targetObject: {fileID: 0}
+    conditions:
+    - eventId: 
+      conditionType: 0
+      parameters: []
+    completionCondition:
+      eventId: 8
+      conditionType: 1
+      parameters: []
+  - id: 9
+    dialogueKey: 
+    targetObject: {fileID: 0}
+    conditions:
+    - eventId: 
+      conditionType: 0
+      parameters: []
+    completionCondition:
+      eventId: 9
+      conditionType: 1
+      parameters: []
+  - id: 10
+    dialogueKey: Planes in the sky can't be merged. Let's land your planes.
+    targetObject: {fileID: 0}
+    conditions:
+    - eventId: 
+      conditionType: 0
+      parameters: []
+    completionCondition:
+      eventId: 10
+      conditionType: 1
+      parameters: []
+  - id: 11
+    dialogueKey: 
+    targetObject: {fileID: 0}
+    conditions:
+    - eventId: 
+      conditionType: 0
+      parameters: []
+    completionCondition:
+      eventId: 11
+      conditionType: 1
+      parameters: []
+  - id: 12
+    dialogueKey: 
+    targetObject: {fileID: 0}
+    conditions:
+    - eventId: 
+      conditionType: 0
+      parameters: []
+    completionCondition:
+      eventId: 12
+      conditionType: 1
+      parameters: []
+  - id: 13
+    dialogueKey: 
+    targetObject: {fileID: 0}
+    conditions:
+    - eventId: 
+      conditionType: 0
+      parameters: []
+    completionCondition:
+      eventId: 13
+      conditionType: 1
+      parameters: []

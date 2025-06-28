@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b8f77c44db6b6a448fcc86f9cb73122, type: 3}
+  m_Name: tutorial_4
+  m_EditorClassIdentifier: 
+  id: tutorial_4
+  categoryId: category_1
+  title: daily reward
+  description: Tutorial description
+  onlyShowOnce: 1
+  requiredLevel: 6
+  dependencies: []
+  startConditions: []
+  steps:
+  - id: 22
+    dialogueKey: Claim your daily rewards and improve your inventory every day!
+    targetObject: {fileID: 0}
+    conditions: []
+    completionCondition:
+      eventId: 22
+      conditionType: 1
+      parameters: []
+  - id: 23
+    dialogueKey: 
+    targetObject: {fileID: 0}
+    conditions: []
+    completionCondition:
+      eventId: 23
+      conditionType: 1
+      parameters: []

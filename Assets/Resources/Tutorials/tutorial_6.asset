@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b8f77c44db6b6a448fcc86f9cb73122, type: 3}
+  m_Name: tutorial_6
+  m_EditorClassIdentifier: 
+  id: tutorial_6
+  categoryId: category_1
+  title: leaderboard
+  description: Tutorial description
+  onlyShowOnce: 1
+  requiredLevel: 7
+  dependencies: []
+  startConditions: []
+  steps:
+  - id: 25
+    dialogueKey: 
+    targetObject: {fileID: 0}
+    conditions: []
+    completionCondition:
+      eventId: 25
+      conditionType: 1
+      parameters: []
+  - id: 26
+    dialogueKey: Terrific! Your fleet begins to take shape! Now is the time to compete
+      with global captains!
+    targetObject: {fileID: 0}
+    conditions: []
+    completionCondition:
+      eventId: 26
+      conditionType: 1
+      parameters: []
