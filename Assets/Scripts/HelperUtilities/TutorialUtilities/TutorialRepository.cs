@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Linq;
 using UnityHelperSDK.Events;
 using UnityHelperSDK.Data;
+using UnityHelperSDK.Tutorial;
 
 namespace UnityHelperSDK.Tutorial
 {
@@ -16,51 +17,6 @@ namespace UnityHelperSDK.Tutorial
     /// </summary>
     public class TutorialRepository : MonoBehaviour
     {
-        #region Tutorial Data Structures
-
-        [Serializable]
-        public class TutorialData
-        {
-            public string Id;
-            public string CategoryId;
-            public string Title;
-            public string Description;
-            public bool OnlyShowOnce;
-            public int RequiredLevel;
-            public List<string> Dependencies;
-            public List<TutorialConditionData> StartConditions;
-            public List<TutorialStepData> Steps;
-        }
-
-        [Serializable]
-        public class TutorialStepData
-        {
-            public string Id;
-            public string DialogueKey;
-            public GameObject TargetObject;
-            public List<TutorialConditionData> Conditions;
-            public TutorialConditionData CompletionCondition;
-        }
-
-        [Serializable]
-        public class TutorialConditionData
-        {
-            public string EventId;
-            public TutorialConditionType ConditionType;
-            public string[] Parameters;
-        }
-
-        [Serializable]
-        public class TutorialCategoryData
-        {
-            public string Id;
-            public string Name;
-            public string Description;
-            public int Order;
-        }
-
-        #endregion
-
         #region Helper Classes
 
         public abstract class TutorialCondition
@@ -114,14 +70,14 @@ namespace UnityHelperSDK.Tutorial
             }
         }
 
-        private Dictionary<string, TutorialData> _tutorialDefinitions;
-        private Dictionary<string, TutorialCategoryData> _categories;
+        private Dictionary<string, TutorialDefinition> _tutorialDefinitions;
+        private Dictionary<string, TutorialCategory> _categories;
         private Dictionary<string, TutorialSequence> _activeSequences;
         private HashSet<string> _completedTutorials;
 
         // Public accessors
-        public IReadOnlyDictionary<string, TutorialData> TutorialDefinitions => _tutorialDefinitions;
-        public IReadOnlyDictionary<string, TutorialCategoryData> Categories => _categories;
+        public IReadOnlyDictionary<string, TutorialDefinition> TutorialDefinitions => _tutorialDefinitions;
+        public IReadOnlyDictionary<string, TutorialCategory> Categories => _categories;
         public IReadOnlyDictionary<string, TutorialSequence> ActiveSequences => _activeSequences;
         public IReadOnlyCollection<string> CompletedTutorials => _completedTutorials;
 
@@ -144,55 +100,29 @@ namespace UnityHelperSDK.Tutorial
 
         private async Task InitializeAsync()
         {
-            _tutorialDefinitions = new Dictionary<string, TutorialData>();
-            _categories = new Dictionary<string, TutorialCategoryData>();
             _activeSequences = new Dictionary<string, TutorialSequence>();
             _completedTutorials = new HashSet<string>();
 
-            await LoadTutorialDefinitions();
+            // Load ScriptableObject assets
+            _tutorialDefinitions = new Dictionary<string, TutorialDefinition>();
+            _categories = new Dictionary<string, TutorialCategory>();
+            foreach (var cat in TutorialCategory.LoadAllCategories())
+            {
+                if (!string.IsNullOrEmpty(cat.Id))
+                    _categories[cat.Id] = cat;
+            }
+            foreach (var tut in TutorialDefinition.LoadAllDefinitions())
+            {
+                if (!string.IsNullOrEmpty(tut.Id))
+                    _tutorialDefinitions[tut.Id] = tut;
+            }
+
+            foreach (var tutorial in _tutorialDefinitions.Values)
+            {
+                CreateTutorialSequence(tutorial);
+            }
+
             await LoadTutorialProgress();
-        }
-
-        private async Task LoadTutorialDefinitions()
-        {
-            try
-            {
-                var json = await LoadTutorialJson();
-                if (!string.IsNullOrEmpty(json))
-                {
-                    var data = UnityHelperSDK.Data.JsonHelper.Deserialize<Dictionary<string, TutorialData>>(json);
-                    if (data != null)
-                    {
-                        _tutorialDefinitions = data;
-                        foreach (var tutorial in _tutorialDefinitions)
-                        {
-                            CreateTutorialSequence(tutorial.Value);
-                        }
-                    }
-                }
-
-                json = await LoadCategoryJson();
-                if (!string.IsNullOrEmpty(json))
-                {
-                    _categories = UnityHelperSDK.Data.JsonHelper.Deserialize<Dictionary<string, TutorialCategoryData>>(json);
-                }
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"Error loading tutorial definitions: {e.Message}");
-            }
-        }
-
-        private Task<string> LoadTutorialJson()
-        {
-            var textAsset = Resources.Load<TextAsset>("Tutorials/tutorial_definitions");
-            return Task.FromResult(textAsset?.text ?? "");
-        }
-
-        private Task<string> LoadCategoryJson()
-        {
-            var textAsset = Resources.Load<TextAsset>("Tutorials/tutorial_categories");
-            return Task.FromResult(textAsset?.text ?? "");
         }
 
         private Task LoadTutorialProgress()
@@ -229,66 +159,50 @@ namespace UnityHelperSDK.Tutorial
             // TODO: Implement this based on your game's level system
             return 1;
         }        
-        protected virtual void CreateTutorialSequence(TutorialData data)
+        protected virtual void CreateTutorialSequence(TutorialDefinition data)
         {
             var sequence = new TutorialSequence(data.Id, data.OnlyShowOnce, data.RequiredLevel, data.CategoryId);
-
-            // Create event handlers for start conditions
-            foreach (var condition in data.StartConditions ?? Enumerable.Empty<TutorialConditionData>())
+            foreach (var condition in data.StartConditions ?? System.Linq.Enumerable.Empty<TutorialConditionData>())
             {
                 if (condition.ConditionType == TutorialConditionType.Start)
                 {
                     var handler = CreateStartConditionHandler(condition, data);
                     if (handler != null)
-                    {
                         sequence.AddStartCondition(handler);
-                    }
                 }
             }
-
-            // Create steps with their conditions
             foreach (var stepData in data.Steps)
             {
-                var step = new TutorialStep(stepData.Id, stepData.DialogueKey);
-
-                // Add step conditions
-                foreach (var condition in stepData.Conditions ?? Enumerable.Empty<TutorialConditionData>())
+                var step = new TutorialStep(stepData.Id, stepData.DialogueKey, stepData.TargetObject);
+                foreach (var condition in stepData.Conditions ?? System.Linq.Enumerable.Empty<TutorialConditionData>())
                 {
                     var handler = (condition.ConditionType == TutorialConditionType.Custom) ?
                         CreateCustomConditionHandler(condition, data, stepData.Id) :
                         CreateStepConditionHandler(condition, data, stepData.Id);
-                        
                     if (handler != null)
-                    {
                         step.AddCondition(handler);
-                    }
                 }
-
-                // Add completion condition
                 if (stepData.CompletionCondition != null)
                 {
                     var handler = (stepData.CompletionCondition.ConditionType == TutorialConditionType.Custom) ?
                         CreateCustomConditionHandler(stepData.CompletionCondition, data, stepData.Id) :
                         CreateStepConditionHandler(stepData.CompletionCondition, data, stepData.Id);
-                        
                     if (handler != null)
-                    {
                         step.SetCompletionCondition(handler);
-                    }
                 }
-
                 sequence.AddStep(step);
             }
-
             _activeSequences[data.Id] = sequence;
             TutorialHelper.RegisterTutorial(sequence);
             OnTutorialRegistered?.Invoke(data.Id);
-        }        private Action<TutorialEvents.TutorialStartConditionEvent> CreateStartConditionHandler(
+        }
+
+        private Action<TutorialEvents.TutorialStartConditionEvent> CreateStartConditionHandler(
             TutorialConditionData condition,
-            TutorialData tutorial)
+            TutorialDefinition tutorial)
         {
             if (condition == null) return null;
-            return (evt) => 
+            return (evt) =>
             {
                 if (evt.TutorialId == tutorial.Id)
                 {
@@ -299,11 +213,11 @@ namespace UnityHelperSDK.Tutorial
 
         private Action<TutorialEvents.TutorialStepConditionEvent> CreateStepConditionHandler(
             TutorialConditionData condition,
-            TutorialData tutorial,
+            TutorialDefinition tutorial,
             string stepId)
         {
             if (condition == null) return null;
-            return (evt) => 
+            return (evt) =>
             {
                 if (evt.TutorialId == tutorial.Id && evt.StepId == stepId)
                 {
@@ -320,11 +234,11 @@ namespace UnityHelperSDK.Tutorial
 
         private Action<TutorialEvents.TutorialStepConditionEvent> CreateCustomConditionHandler(
             TutorialConditionData condition,
-            TutorialData tutorial,
+            TutorialDefinition tutorial,
             string stepId)
         {
             if (condition == null) return null;
-            return (evt) => 
+            return (evt) =>
             {
                 if (evt.TutorialId == tutorial.Id &&
                     (string.IsNullOrEmpty(stepId) || evt.StepId == stepId))
@@ -342,7 +256,7 @@ namespace UnityHelperSDK.Tutorial
 
         private Action<TutorialEvents.TutorialStepConditionEvent> CreateEventHandler(
             TutorialConditionData condition, 
-            TutorialData tutorial, 
+            TutorialDefinition tutorial, 
             string stepId = null)
         {
             switch (condition.ConditionType)
@@ -459,14 +373,14 @@ namespace UnityHelperSDK.Tutorial
             return _completedTutorials.Contains(tutorialId);
         }
 
-        public List<TutorialData> GetTutorialsByCategory(string categoryId)
+        public List<TutorialDefinition> GetTutorialsByCategory(string categoryId)
         {
             return _tutorialDefinitions.Values
                 .Where(t => t.CategoryId == categoryId)
                 .ToList();
         }
 
-        public List<TutorialCategoryData> GetCategories()
+        public List<TutorialCategory> GetCategories()
         {
             return _categories.Values.ToList();
         }

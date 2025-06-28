@@ -10,7 +10,7 @@ using UnityHelperSDK.Tutorial;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
-namespace UnityHelperSDK.Editor
+namespace UnityHelperSDK.Tutorial
 {
     /// <summary>
     /// Editor window for managing tutorials and their categories,
@@ -216,24 +216,29 @@ namespace UnityHelperSDK.Editor
                     "Are you sure you want to delete this category? This will not delete the tutorials in it.", 
                     "Delete", "Cancel"))
                 {
+                    string assetPath = AssetDatabase.GetAssetPath(category);
+                    if (!string.IsNullOrEmpty(assetPath))
+                    {
+                        AssetDatabase.DeleteAsset(assetPath);
+                    }
                     _categories.Remove(category.Id);
                     _selectedCategory = null;
                     _selectedTutorial = null;
-                    _isDirty = true;
+                    _isDirty = false;
                     _treeView?.Refresh(_categories, _tutorials);
                     return;
                 }
             }
 
-            if (EditorGUI.EndChangeCheck())
-            {
-                // Update category fields if changed
-                if (newName != category.Name || newDescription != category.Description || newSortOrder != category.SortOrder)
-                {
-                    category.Initialize(category.Id, newName, newDescription, newSortOrder);
-                    _isDirty = true;
-                }
-            }
+            // if (EditorGUI.EndChangeCheck())
+            // {
+            //     // Update category fields if changed
+            //     if (newName != category.Name || newDescription != category.Description || newSortOrder != category.SortOrder)
+            //     {
+            //         category.Initialize(category.Id, newName, newDescription, newSortOrder);
+            //         _isDirty = true;
+            //     }
+            // }
         }
 
         private void DrawTutorialInspector(TutorialDefinition tutorial)
@@ -537,223 +542,90 @@ namespace UnityHelperSDK.Editor
                     if (_categories.TryGetValue(tutorial.CategoryId, out var category))
                     {
                         category.TutorialIds.Remove(tutorial.Id);
+                        EditorUtility.SetDirty(category);
+                    }
+                    string assetPath = AssetDatabase.GetAssetPath(tutorial);
+                    if (!string.IsNullOrEmpty(assetPath))
+                    {
+                        AssetDatabase.DeleteAsset(assetPath);
                     }
                     _tutorials.Remove(tutorial.Id);
                     _selectedCategory = null;
                     _selectedTutorial = null;
-                    _isDirty = true;
+                    _isDirty = false;
                     _treeView?.Refresh(_categories, _tutorials);
                     return;
                 }
             }
 
-            if (EditorGUI.EndChangeCheck())
-            {
-                if (newTitle != tutorial.Title || 
-                    newDescription != tutorial.Description || 
-                    newRequiredLevel != tutorial.RequiredLevel || 
-                    newOnlyShowOnce != tutorial.OnlyShowOnce)
-                {
-                    tutorial.Initialize(
-                        tutorial.Id,
-                        tutorial.CategoryId,
-                        newTitle,
-                        newDescription,
-                        newRequiredLevel,
-                        newOnlyShowOnce
-                    );
-                    _isDirty = true;
-                }
-            }
+            // if (EditorGUI.EndChangeCheck())
+            // {
+            //     if (newTitle != tutorial.Title || 
+            //         newDescription != tutorial.Description || 
+            //         newRequiredLevel != tutorial.RequiredLevel || 
+            //         newOnlyShowOnce != tutorial.OnlyShowOnce)
+            //     {
+            //         tutorial.Initialize(
+            //             tutorial.Id,
+            //             tutorial.CategoryId,
+            //             newTitle,
+            //             newDescription,
+            //             newRequiredLevel,
+            //             newOnlyShowOnce
+            //         );
+            //         _isDirty = true;
+            //     }
+            // }
         }          
         private void LoadTutorialData()
         {
-            Debug.Log("[TutorialEditorWindow] Entering LoadTutorialData()");
+            Debug.Log("[TutorialEditorWindow] Loading ScriptableObject tutorial data...");
+            _categories = new Dictionary<string, TutorialCategory>();
+            _tutorials = new Dictionary<string, TutorialDefinition>();
 
-            try
+            // Load all ScriptableObject assets from Resources/Tutorials
+            foreach (var cat in TutorialCategory.LoadAllCategories())
             {
-                Debug.Log("[TutorialEditorWindow] Loading tutorial data...");
-
-                // Initialize empty collections
-                _categories = new Dictionary<string, TutorialCategory>();
-                _tutorials = new Dictionary<string, TutorialDefinition>();
-
-                // Ensure the tutorials directory exists
-                if (!Directory.Exists(TUTORIALS_PATH))
-                {
-                    Debug.Log($"[TutorialEditorWindow] Creating tutorials folder at: {TUTORIALS_PATH}");
-                    Directory.CreateDirectory(TUTORIALS_PATH);
-                }
-                else
-                {
-                    Debug.Log($"[TutorialEditorWindow] Tutorials folder exists at: {TUTORIALS_PATH}");
-                }
-
-                // Load categories
-                var categoriesPath = Path.Combine(TUTORIALS_PATH, "categories.json");
-                Debug.Log($"[TutorialEditorWindow] Looking for categories at: {categoriesPath}");
-                if (File.Exists(categoriesPath))
-                {
-                    Debug.Log($"[TutorialEditorWindow] Reading categories from: {categoriesPath}");
-                    string jsonContent = File.ReadAllText(categoriesPath);
-                    Debug.Log($"[TutorialEditorWindow] Categories JSON content: {jsonContent}");
-
-                    var settings = new JsonSerializerSettings
-                    {
-                        ContractResolver = new DefaultContractResolver(),
-                        Formatting = Formatting.Indented
-                    };
-
-                    var categories = JsonConvert.DeserializeObject<List<TutorialCategory>>(jsonContent);
-
-                    if (categories != null && categories.Count > 0)
-                    {
-                        foreach (var category in categories)
-                        {
-                            Debug.Log($"[TutorialEditorWindow] Processing category - Id: {category.Id}, Name: {category.Name} , Description: {category.Description} , SortOrder: {category.SortOrder} tutorials: {category.TutorialIds.Count}");
-                        }
-
-                        _categories = categories.ToDictionary(c => c.Id);
-                        Debug.Log($"[TutorialEditorWindow] Loaded {_categories.Count} categories successfully");
-                    }
-                    else
-                    {
-                        Debug.LogWarning("[TutorialEditorWindow] No categories found in JSON file or deserialization returned null.");
-                    }
-                }
-                else
-                {
-                    Debug.LogWarning($"[TutorialEditorWindow] Categories file does not exist at: {categoriesPath}");
-                }
-
-                // Load tutorials
-                var tutorialsPath = Path.Combine(TUTORIALS_PATH, "tutorials.json");
-                Debug.Log($"[TutorialEditorWindow] Looking for tutorials at: {tutorialsPath}");
-                if (File.Exists(tutorialsPath))
-                {
-                    Debug.Log($"[TutorialEditorWindow] Reading tutorials from: {tutorialsPath}");
-                    string jsonContent = File.ReadAllText(tutorialsPath);
-                    Debug.Log($"[TutorialEditorWindow] Tutorials JSON content: {jsonContent}");
-
-                    var settings = new JsonSerializerSettings
-                    {
-                        ContractResolver = new DefaultContractResolver(),
-                        Formatting = Formatting.Indented
-                    };
-                    var tutorials = JsonConvert.DeserializeObject<List<TutorialDefinition>>(jsonContent);
-
-                    if (tutorials != null && tutorials.Count > 0)
-                    {
-                        foreach (var tutorial in tutorials)
-                        {
-                            Debug.Log($"[TutorialEditorWindow] Processing tutorial - Id: {tutorial.Id}, CategoryId: {tutorial.CategoryId}, Title: {tutorial.Title}");
-
-                            if (string.IsNullOrEmpty(tutorial.CategoryId))
-                            {
-                                Debug.LogError($"[TutorialEditorWindow] Tutorial '{tutorial.Id}' has an invalid category ID '{tutorial.CategoryId}'. This will be skipped.");
-                                continue;
-                            }
-
-                            if (!_categories.ContainsKey(tutorial.CategoryId))
-                            {
-                                Debug.LogError($"[TutorialEditorWindow] Tutorial '{tutorial.Id}' references non-existent category '{tutorial.CategoryId}'. This will be skipped.");
-                                continue;
-                            }
-                        }
-
-                        _tutorials = tutorials.ToDictionary(t => t.Id);
-                        Debug.Log($"[TutorialEditorWindow] Loaded {_tutorials.Count} tutorials successfully");
-                    }
-                    else
-                    {
-                        Debug.LogWarning("[TutorialEditorWindow] No tutorials found in JSON file or deserialization returned null.");
-                    }
-                }
-                else
-                {
-                    Debug.LogWarning($"[TutorialEditorWindow] Tutorials file does not exist at: {tutorialsPath}");
-                }
-
-                // Clear selection when loading new data
-                Debug.Log("[TutorialEditorWindow] Clearing selection after loading data.");
-                _selectedCategory = null;
-                _selectedTutorial = null;
-
-                _isDirty = false;
-
-                // Refresh the tree view with the loaded data
-                if (_treeView != null)
-                {
-                    Debug.Log("[TutorialEditorWindow] Refreshing tree view.");
-                    _treeView.Refresh(_categories, _tutorials);
-                }
-
-                Repaint();
-                Debug.Log("[TutorialEditorWindow] Tutorial data loaded successfully.");
+                if (!string.IsNullOrEmpty(cat.Id))
+                    _categories[cat.Id] = cat;
             }
-            catch (Exception ex)
+            foreach (var tut in TutorialDefinition.LoadAllDefinitions())
             {
-                Debug.LogError($"Error loading tutorial data: {ex.Message}\n{ex.StackTrace}");
+                if (!string.IsNullOrEmpty(tut.Id))
+                    _tutorials[tut.Id] = tut;
             }
-            Debug.Log("[TutorialEditorWindow] Exiting LoadTutorialData()");
-        }        
-        
+
+            _selectedCategory = null;
+            _selectedTutorial = null;
+            _isDirty = false;
+            _treeView?.Refresh(_categories, _tutorials);
+            Repaint();
+        }
+
         private void SaveTutorialData()
         {
-            if (!_isDirty)
-                return;
-
-            try
-            {
-                // Ensure directory exists
-                if (!Directory.Exists(TUTORIALS_PATH))
-                {
-                    Directory.CreateDirectory(TUTORIALS_PATH);
-                }
-
-                // Save categories
-                var categoriesPath = Path.Combine(TUTORIALS_PATH, "categories.json");
-                var categoriesJson = UnityHelperSDK.Data.JsonHelper.Serialize(_categories.Values.ToList(), true);
-                File.WriteAllText(categoriesPath, categoriesJson);
-                
-                // Save tutorials
-                var tutorialsPath = Path.Combine(TUTORIALS_PATH, "tutorials.json");
-                var tutorialsJson = UnityHelperSDK.Data.JsonHelper.Serialize(_tutorials.Values.ToList(), true);
-                File.WriteAllText(tutorialsPath, tutorialsJson);
-                
-                _isDirty = false;
-                _treeView?.Refresh(_categories, _tutorials);
-                Debug.Log("[TutorialEditorWindow] Tutorial data saved successfully!");
-                AssetDatabase.Refresh();
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[TutorialEditorWindow] Error saving tutorial data: {ex.Message}");
-                EditorUtility.DisplayDialog("Error", "Failed to save tutorial data. Check the console for details.", "OK");
-            }
-            
+            // No-op: ScriptableObjects are saved as assets, not as JSON.
+            AssetDatabase.SaveAssets();
+            _isDirty = false;
+            _treeView?.Refresh(_categories, _tutorials);
+            Debug.Log("[TutorialEditorWindow] ScriptableObject tutorial data saved!");
+            AssetDatabase.Refresh();
             Repaint();
         }
 
         private void AddNewCategory()
         {
-            // Generate a unique ID for the new category
-            var newId = "category_" + (_categories.Count + 1);
-            while (_categories.ContainsKey(newId))
-            {
-                newId = "category_" + (_categories.Count + 2);
-            }
-
-            // Create new category
-            var category = new TutorialCategory();
-            category.Initialize(newId, $"New Category {_categories.Count + 1}", "New category description", _categories.Count);
-
+            var newId = "category_" + Guid.NewGuid().ToString("N");
+            var assetPath = $"Assets/Resources/Tutorials/{newId}.asset";
+            var category = ScriptableObject.CreateInstance<TutorialCategory>();
+            category.Id = newId;
+            category.Name = $"New Category {_categories.Count + 1}";
+            category.Description = "New category description";
+            category.SortOrder = _categories.Count;
+            AssetDatabase.CreateAsset(category, assetPath);
+            AssetDatabase.SaveAssets();
             _categories[category.Id] = category;
-            
-            // Mark dirty and save
-            _isDirty = true;
-            SaveTutorialData();
-            
+            _isDirty = false;
             _selectedCategory = category.Id;
             _selectedTutorial = null;
             _treeView?.Refresh(_categories, _tutorials);
@@ -761,37 +633,29 @@ namespace UnityHelperSDK.Editor
 
         private void AddNewTutorial()
         {
-            // Make sure we have a selected category
             var selectedCategoryId = _selectedCategory ?? _categories.Keys.FirstOrDefault();
             if (string.IsNullOrEmpty(selectedCategoryId))
             {
                 EditorUtility.DisplayDialog("Error", "Please select or create a category first.", "OK");
                 return;
             }
-
-            // Generate a unique ID for the new tutorial
-            var newId = "tutorial_" + (_tutorials.Count + 1);
-            while (_tutorials.ContainsKey(newId))
-            {
-                newId = "tutorial_" + (_tutorials.Count + 2);
-            }
-
-            // Create new tutorial
-            var tutorial = new TutorialDefinition();
-            tutorial.Initialize(newId, selectedCategoryId, $"New Tutorial {_tutorials.Count + 1}", "Tutorial description");
-
+            var newId = "tutorial_" + Guid.NewGuid().ToString("N");
+            var assetPath = $"Assets/Resources/Tutorials/{newId}.asset";
+            var tutorial = ScriptableObject.CreateInstance<TutorialDefinition>();
+            tutorial.Id = newId;
+            tutorial.CategoryId = selectedCategoryId;
+            tutorial.Title = $"New Tutorial {_tutorials.Count + 1}";
+            tutorial.Description = "Tutorial description";
+            AssetDatabase.CreateAsset(tutorial, assetPath);
+            AssetDatabase.SaveAssets();
             _tutorials[tutorial.Id] = tutorial;
-
-            // Add to category
             if (_categories.TryGetValue(selectedCategoryId, out var category))
             {
-                category.TutorialIds.Add(tutorial.Id);
+                if (!category.TutorialIds.Contains(tutorial.Id))
+                    category.TutorialIds.Add(tutorial.Id);
+                EditorUtility.SetDirty(category);
             }
-
-            // Mark dirty and save
-            _isDirty = true;
-            SaveTutorialData();
-
+            _isDirty = false;
             _selectedTutorial = tutorial.Id;
             _treeView?.Refresh(_categories, _tutorials);
         }

@@ -6,7 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace UnityHelperSDK.Editor
+namespace UnityHelperSDK.Tutorial
 {
     /// <summary>
     /// A custom TreeView implementation for displaying and managing tutorials.
