@@ -7,6 +7,7 @@ using UnityEngine.UIElements;
 using UnityEditor.UIElements;
 using System;
 using UnityHelperSDK.Tutorial;
+using UnityHelperSDK.HelperUtilities;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
@@ -27,6 +28,10 @@ namespace UnityHelperSDK.Tutorial
         private string _selectedTutorial;
         private TutorialTreeView _treeView;
         private IMGUIContainer _inspectorContainer;
+        private Dictionary<int, bool> _stepFoldouts = new();
+        private Dictionary<(int, int), bool> _conditionFoldouts = new();
+        private int _expandedStep = -1;
+        private Dictionary<int, int> _expandedCondition = new();
 
         [MenuItem("Unity Helper SDK/Tutorial Editor")]
         public static void ShowWindow()
@@ -287,107 +292,23 @@ namespace UnityHelperSDK.Tutorial
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Start Conditions", EditorStyles.boldLabel);
-
             var startConditions = tutorial.StartConditions;
             if (startConditions.Count > 0)
             {
                 EditorGUI.indentLevel++;
                 for (int i = 0; i < startConditions.Count; i++)
                 {
-                    EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-                              var condition = startConditions[i];
-            condition.EventId = EditorGUILayout.TextField("Event ID", condition.EventId);
-            condition.ConditionType = (UnityHelperSDK.Tutorial.TutorialConditionType)EditorGUILayout.EnumPopup("Condition Type", condition.ConditionType);
-                    
-                    EditorGUILayout.LabelField("Parameters");
-                    EditorGUI.indentLevel++;
-                    
-                    if (condition.Parameters == null)
-                        condition.Parameters = new string[0];
-                        
-                    for (int p = 0; p < condition.Parameters.Length; p++)
-                    {
-                        EditorGUILayout.BeginHorizontal();
-                        condition.Parameters[p] = EditorGUILayout.TextField($"Parameter {p + 1}", condition.Parameters[p]);
-                        if (GUILayout.Button("-", GUILayout.Width(20)))
-                        {
-                            var newParams = condition.Parameters.ToList();
-                            newParams.RemoveAt(p);
-                            condition.Parameters = newParams.ToArray();
-                            _isDirty = true;
-                            break;
-                        }
-                        EditorGUILayout.EndHorizontal();
-                    }
-                    
-                    if (GUILayout.Button("Add Parameter"))
-                    {
-                        var newParams = condition.Parameters.ToList();
-                        newParams.Add("");
-                        condition.Parameters = newParams.ToArray();
-                        _isDirty = true;
-                    }
-                    
-                    EditorGUI.indentLevel--;
-                    
-                    if (GUILayout.Button("Remove Condition"))
-                    {
-                        startConditions.RemoveAt(i);
-                        _isDirty = true;
-                        break;
-                    }
-                    
-                    EditorGUILayout.EndVertical();
-                }
-                EditorGUI.indentLevel--;
-            }
-
-            if (GUILayout.Button("Add Start Condition"))
-            {
-                startConditions.Add(new TutorialConditionData 
-                { 
-                    EventId = "", 
-                    ConditionType = UnityHelperSDK.Tutorial.TutorialConditionType.Start,
-                    Parameters = new string[0]
-                });
-                _isDirty = true;
-            }
-
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Tutorial Steps", EditorStyles.boldLabel);
-
-            var steps = tutorial.Steps;
-            if (steps.Count > 0)
-            {
-                EditorGUI.indentLevel++;
-                for (int i = 0; i < steps.Count; i++)
-                {
-                    EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-                    
-                    var step = steps[i];
-                    step.Id = EditorGUILayout.TextField("Step ID", step.Id);
-                    step.DialogueKey = EditorGUILayout.TextField("Dialogue Key", step.DialogueKey);
-                    step.TargetObject = EditorGUILayout.ObjectField("Target Object", step.TargetObject, typeof(GameObject), true) as GameObject;
-
-                    EditorGUILayout.Space();
-                    EditorGUILayout.LabelField("Step Conditions", EditorStyles.boldLabel);
-                    
-                    if (step.Conditions == null)
-                        step.Conditions = new List<TutorialConditionData>();
-
-                    for (int c = 0; c < step.Conditions.Count; c++)
+                    if (!_conditionFoldouts.ContainsKey((-1, i))) _conditionFoldouts[(-1, i)] = false;
+                    _conditionFoldouts[(-1, i)] = EditorGUIHelper.FoldoutSection($"Start Condition {i + 1}", _conditionFoldouts[(-1, i)]);
+                    if (_conditionFoldouts[(-1, i)])
                     {
                         EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-                        var condition = step.Conditions[c];
+                        var condition = startConditions[i];
                         condition.EventId = EditorGUILayout.TextField("Event ID", condition.EventId);
                         condition.ConditionType = (UnityHelperSDK.Tutorial.TutorialConditionType)EditorGUILayout.EnumPopup("Condition Type", condition.ConditionType);
-                        
                         EditorGUILayout.LabelField("Parameters");
                         EditorGUI.indentLevel++;
-                        
-                        if (condition.Parameters == null)
-                            condition.Parameters = new string[0];
-                            
+                        if (condition.Parameters == null) condition.Parameters = new string[0];
                         for (int p = 0; p < condition.Parameters.Length; p++)
                         {
                             EditorGUILayout.BeginHorizontal();
@@ -402,7 +323,6 @@ namespace UnityHelperSDK.Tutorial
                             }
                             EditorGUILayout.EndHorizontal();
                         }
-                        
                         if (GUILayout.Button("Add Parameter"))
                         {
                             var newParams = condition.Parameters.ToList();
@@ -410,111 +330,175 @@ namespace UnityHelperSDK.Tutorial
                             condition.Parameters = newParams.ToArray();
                             _isDirty = true;
                         }
-                        
                         EditorGUI.indentLevel--;
-                        
                         if (GUILayout.Button("Remove Condition"))
                         {
-                            step.Conditions.RemoveAt(c);
+                            startConditions.RemoveAt(i);
                             _isDirty = true;
                             break;
                         }
-                        
                         EditorGUILayout.EndVertical();
                     }
-
-                    if (GUILayout.Button("Add Step Condition"))
-                    {                step.Conditions.Add(new TutorialConditionData 
-                { 
-                    EventId = "", 
-                    ConditionType = UnityHelperSDK.Tutorial.TutorialConditionType.Step,
-                    Parameters = new string[0]
-                });
-                        _isDirty = true;
-                    }
-
-                    EditorGUILayout.Space();
-                    EditorGUILayout.LabelField("Completion Condition", EditorStyles.boldLabel);
-                    
-                    if (step.CompletionCondition == null)
-                    {
-                        if (GUILayout.Button("Add Completion Condition"))
-                        {                    step.CompletionCondition = new TutorialConditionData 
-                    { 
-                        EventId = "", 
-                        ConditionType = UnityHelperSDK.Tutorial.TutorialConditionType.Step,
-                        Parameters = new string[0]
-                    };
-                            _isDirty = true;
-                        }
-                    }
-                    else
-                    {
-                        var completion = step.CompletionCondition;
-                        completion.EventId = EditorGUILayout.TextField("Event ID", completion.EventId);
-                        completion.ConditionType = (UnityHelperSDK.Tutorial.TutorialConditionType)EditorGUILayout.EnumPopup("Condition Type", completion.ConditionType);
-                        
-                        EditorGUILayout.LabelField("Parameters");
-                        EditorGUI.indentLevel++;
-                        
-                        if (completion.Parameters == null)
-                            completion.Parameters = new string[0];
-                            
-                        for (int p = 0; p < completion.Parameters.Length; p++)
-                        {
-                            EditorGUILayout.BeginHorizontal();
-                            completion.Parameters[p] = EditorGUILayout.TextField($"Parameter {p + 1}", completion.Parameters[p]);
-                            if (GUILayout.Button("-", GUILayout.Width(20)))
-                            {
-                                var newParams = completion.Parameters.ToList();
-                                newParams.RemoveAt(p);
-                                completion.Parameters = newParams.ToArray();
-                                _isDirty = true;
-                                break;
-                            }
-                            EditorGUILayout.EndHorizontal();
-                        }
-                        
-                        if (GUILayout.Button("Add Parameter"))
-                        {
-                            var newParams = completion.Parameters.ToList();
-                            newParams.Add("");
-                            completion.Parameters = newParams.ToArray();
-                            _isDirty = true;
-                        }
-                        
-                        EditorGUI.indentLevel--;
-                        
-                        if (GUILayout.Button("Remove Completion Condition"))
-                        {
-                            step.CompletionCondition = null;
-                            _isDirty = true;
-                        }
-                    }
-                    
-                    if (GUILayout.Button("Remove Step"))
-                    {
-                        steps.RemoveAt(i);
-                        _isDirty = true;
-                        break;
-                    }
-                    
-                    EditorGUILayout.EndVertical();
                 }
                 EditorGUI.indentLevel--;
             }
-
-            if (GUILayout.Button("Add Step"))
+            if (GUILayout.Button("Add Start Condition"))
             {
-                steps.Add(new TutorialStepData 
-                { 
-                    Id = System.Guid.NewGuid().ToString(),
-                    DialogueKey = "",
-                    Conditions = new List<TutorialConditionData>()
-                });
+                startConditions.Add(new TutorialConditionData { EventId = "", ConditionType = UnityHelperSDK.Tutorial.TutorialConditionType.Start, Parameters = new string[0] });
                 _isDirty = true;
             }
-
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Tutorial Steps", EditorStyles.boldLabel);
+            var steps = tutorial.Steps;
+            if (steps.Count > 0)
+            {
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("Collapse All Steps", GUILayout.Width(150)))
+                {
+                    _expandedStep = -1;
+                    _expandedCondition.Clear();
+                }
+                EditorGUILayout.EndHorizontal();
+                EditorGUI.indentLevel++;
+                for (int i = 0; i < steps.Count; i++)
+                {
+                    bool expanded = _expandedStep == i;
+                    var step = steps[i];
+                    if (GUILayout.Button($"{(expanded ? "▼" : "►")} Step {i + 1}: {step.DialogueKey}", EditorStyles.foldout))
+                    {
+                        _expandedStep = expanded ? -1 : i;
+                        _expandedCondition.Clear();
+                    }
+                    if (expanded)
+                    {
+                        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                        step.Id = EditorGUILayout.TextField("Step ID", step.Id);
+                        step.DialogueKey = EditorGUILayout.TextField("Dialogue Key", step.DialogueKey);
+                        step.TargetObject = EditorGUILayout.ObjectField("Target Object", step.TargetObject, typeof(GameObject), true) as GameObject;
+                        EditorGUILayout.Space();
+                        EditorGUILayout.LabelField("Step Conditions", EditorStyles.boldLabel);
+                        var conditions = step.Conditions ??= new List<TutorialConditionData>();
+                        if (conditions.Count > 0)
+                        {
+                            EditorGUILayout.BeginHorizontal();
+                            GUILayout.FlexibleSpace();
+                            if (GUILayout.Button("Collapse All Conditions", GUILayout.Width(180)))
+                                _expandedCondition[i] = -1;
+                            EditorGUILayout.EndHorizontal();
+                        }
+                        for (int c = 0; c < conditions.Count; c++)
+                        {
+                            bool condExpanded = _expandedCondition.TryGetValue(i, out int idx) && idx == c;
+                            if (GUILayout.Button($"{(condExpanded ? "▼" : "►")} Condition {c + 1}", EditorStyles.foldout))
+                                _expandedCondition[i] = condExpanded ? -1 : c;
+                            if (condExpanded)
+                            {
+                                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                                var condition = conditions[c];
+                                condition.EventId = EditorGUILayout.TextField("Event ID", condition.EventId);
+                                condition.ConditionType = (UnityHelperSDK.Tutorial.TutorialConditionType)EditorGUILayout.EnumPopup("Condition Type", condition.ConditionType);
+                                EditorGUILayout.LabelField("Parameters");
+                                EditorGUI.indentLevel++;
+                                if (condition.Parameters == null) condition.Parameters = new string[0];
+                                for (int p = 0; p < condition.Parameters.Length; p++)
+                                {
+                                    EditorGUILayout.BeginHorizontal();
+                                    condition.Parameters[p] = EditorGUILayout.TextField($"Parameter {p + 1}", condition.Parameters[p]);
+                                    if (GUILayout.Button("-", GUILayout.Width(20)))
+                                    {
+                                        var newParams = condition.Parameters.ToList();
+                                        newParams.RemoveAt(p);
+                                        condition.Parameters = newParams.ToArray();
+                                        _isDirty = true;
+                                        break;
+                                    }
+                                    EditorGUILayout.EndHorizontal();
+                                }
+                                if (GUILayout.Button("Add Parameter"))
+                                {
+                                    var newParams = condition.Parameters.ToList();
+                                    newParams.Add("");
+                                    condition.Parameters = newParams.ToArray();
+                                    _isDirty = true;
+                                }
+                                EditorGUI.indentLevel--;
+                                if (GUILayout.Button("Remove Condition"))
+                                {
+                                    conditions.RemoveAt(c);
+                                    _isDirty = true;
+                                    break;
+                                }
+                                EditorGUILayout.EndVertical();
+                            }
+                        }
+                        if (GUILayout.Button("Add Step Condition"))
+                        {
+                            step.Conditions.Add(new TutorialConditionData { EventId = "", ConditionType = UnityHelperSDK.Tutorial.TutorialConditionType.Step, Parameters = new string[0] });
+                            _isDirty = true;
+                        }
+                        EditorGUILayout.Space();
+                        EditorGUILayout.LabelField("Completion Condition", EditorStyles.boldLabel);
+                        if (step.CompletionCondition == null)
+                        {
+                            if (GUILayout.Button("Add Completion Condition"))
+                            {
+                                step.CompletionCondition = new TutorialConditionData { EventId = "", ConditionType = UnityHelperSDK.Tutorial.TutorialConditionType.Step, Parameters = new string[0] };
+                                _isDirty = true;
+                            }
+                        }
+                        else
+                        {
+                            var completion = step.CompletionCondition;
+                            completion.EventId = EditorGUILayout.TextField("Event ID", completion.EventId);
+                            completion.ConditionType = (UnityHelperSDK.Tutorial.TutorialConditionType)EditorGUILayout.EnumPopup("Condition Type", completion.ConditionType);
+                            EditorGUILayout.LabelField("Parameters");
+                            EditorGUI.indentLevel++;
+                            if (completion.Parameters == null) completion.Parameters = new string[0];
+                            for (int p = 0; p < completion.Parameters.Length; p++)
+                            {
+                                EditorGUILayout.BeginHorizontal();
+                                completion.Parameters[p] = EditorGUILayout.TextField($"Parameter {p + 1}", completion.Parameters[p]);
+                                if (GUILayout.Button("-", GUILayout.Width(20)))
+                                {
+                                    var newParams = completion.Parameters.ToList();
+                                    newParams.RemoveAt(p);
+                                    completion.Parameters = newParams.ToArray();
+                                    _isDirty = true;
+                                    break;
+                                }
+                                EditorGUILayout.EndHorizontal();
+                            }
+                            if (GUILayout.Button("Add Parameter"))
+                            {
+                                var newParams = completion.Parameters.ToList();
+                                newParams.Add("");
+                                completion.Parameters = newParams.ToArray();
+                                _isDirty = true;
+                            }
+                            EditorGUI.indentLevel--;
+                            if (GUILayout.Button("Remove Completion Condition"))
+                            {
+                                step.CompletionCondition = null;
+                                _isDirty = true;
+                            }
+                        }
+                        if (GUILayout.Button("Remove Step"))
+                        {
+                            steps.RemoveAt(i);
+                            _isDirty = true;
+                            break;
+                        }
+                        EditorGUILayout.EndVertical();
+                    }
+                }
+                EditorGUI.indentLevel--;
+            }
+            if (GUILayout.Button("Add Step"))
+            {
+                steps.Add(new TutorialStepData { Id = System.Guid.NewGuid().ToString(), DialogueKey = "", Conditions = new List<TutorialConditionData>() });
+                _isDirty = true;
+            }
             EditorGUILayout.Space();
             if (GUILayout.Button("Add Dependency"))
             {
@@ -532,12 +516,9 @@ namespace UnityHelperSDK.Tutorial
                 }
                 dependencyMenu.ShowAsContext();
             }
-
             if (GUILayout.Button("Delete Tutorial"))
             {
-                if (EditorUtility.DisplayDialog("Delete Tutorial", 
-                    "Are you sure you want to delete this tutorial?", 
-                    "Delete", "Cancel"))
+                if (EditorUtility.DisplayDialog("Delete Tutorial", "Are you sure you want to delete this tutorial?", "Delete", "Cancel"))
                 {
                     if (_categories.TryGetValue(tutorial.CategoryId, out var category))
                     {
