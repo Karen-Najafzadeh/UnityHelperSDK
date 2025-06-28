@@ -10,12 +10,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 003bb4000b2e75040ac1ca021f720a1a, type: 3}
-  m_Name: category_d85d1d2d85b44c5aa7d86b678c1d404e
+  m_Name: category_70d23546c0a643f58a815f5c9f26fe83
   m_EditorClassIdentifier: 
-  Id: category_d85d1d2d85b44c5aa7d86b678c1d404e
+  Id: category_70d23546c0a643f58a815f5c9f26fe83
   Name: New Category 1
   Description: New category description
   SortOrder: 0
-  TutorialIds:
-  - tutorial_ec1991468e7140319ebecbf8be1c9d00
-  - tutorial_fc0fd176b2f54993b8aa66c6a35d5a10
+  TutorialIds: []

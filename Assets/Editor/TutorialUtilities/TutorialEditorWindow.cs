@@ -116,7 +116,7 @@ namespace UnityHelperSDK.Tutorial
         
         private void DrawInspector()
         {
-
+            _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
 
             // If a tutorial is selected
             if (!string.IsNullOrEmpty(_selectedTutorial))
@@ -126,12 +126,12 @@ namespace UnityHelperSDK.Tutorial
                     // Show parent category information in a foldout
                     if (_categories.TryGetValue(_selectedCategory, out var category))
                     {
-                    using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
-                    {
-                        EditorGUILayout.LabelField("Category:", GUILayout.Width(70));
-                        EditorGUILayout.LabelField(category.Name, EditorStyles.boldLabel);
-                    }
-                    EditorGUILayout.Space();
+                        using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+                        {
+                            EditorGUILayout.LabelField("Category:", GUILayout.Width(70));
+                            EditorGUILayout.LabelField(category.Name, EditorStyles.boldLabel);
+                        }
+                        EditorGUILayout.Space();
                     }
 
                     // Draw the tutorial inspector
@@ -145,27 +145,26 @@ namespace UnityHelperSDK.Tutorial
                 {
                     DrawCategoryInspector(category);
                 }
-                }
-                else if (string.IsNullOrEmpty(_selectedCategory) && string.IsNullOrEmpty(_selectedTutorial))
-                {
+            }
+            else if (string.IsNullOrEmpty(_selectedCategory) && string.IsNullOrEmpty(_selectedTutorial))
+            {
                 EditorGUILayout.HelpBox("Select a tutorial or category to edit", MessageType.Info);
+                EditorGUILayout.EndScrollView();
                 return;
             }
-
-            _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
 
             EditorGUILayout.EndScrollView();
 
             if (_isDirty)
             {
-            EditorGUILayout.Space();
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("Save Changes", GUILayout.Width(120)))
-            {
-                SaveTutorialData();
-            }
-            EditorGUILayout.EndHorizontal();
+                EditorGUILayout.Space();
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("Save Changes", GUILayout.Width(120)))
+                {
+                    SaveTutorialData();
+                }
+                EditorGUILayout.EndHorizontal();
             }
         }
 
@@ -496,7 +495,7 @@ namespace UnityHelperSDK.Tutorial
             }
             if (GUILayout.Button("Add Step"))
             {
-                steps.Add(new TutorialStepData { Id = System.Guid.NewGuid().ToString(), DialogueKey = "", Conditions = new List<TutorialConditionData>() });
+                steps.Add(new TutorialStepData { Id = "", DialogueKey = "", Conditions = new List<TutorialConditionData>() });
                 _isDirty = true;
             }
             EditorGUILayout.Space();
@@ -620,7 +619,19 @@ namespace UnityHelperSDK.Tutorial
                 EditorUtility.DisplayDialog("Error", "Please select or create a category first.", "OK");
                 return;
             }
-            var newId = "tutorial_" + Guid.NewGuid().ToString("N");
+            // Find the next available tutorial number
+            int nextNumber = 1;
+            var existingNumbers = _tutorials.Keys
+                .Select(id => {
+                    var match = System.Text.RegularExpressions.Regex.Match(id, @"^tutorial_(\d+)$");
+                    return match.Success ? int.Parse(match.Groups[1].Value) : (int?)null;
+                })
+                .Where(n => n.HasValue)
+                .Select(n => n.Value)
+                .ToHashSet();
+            while (existingNumbers.Contains(nextNumber))
+                nextNumber++;
+            var newId = $"tutorial_{nextNumber}";
             var assetPath = $"Assets/Resources/Tutorials/{newId}.asset";
             var tutorial = ScriptableObject.CreateInstance<TutorialDefinition>();
             tutorial.Id = newId;

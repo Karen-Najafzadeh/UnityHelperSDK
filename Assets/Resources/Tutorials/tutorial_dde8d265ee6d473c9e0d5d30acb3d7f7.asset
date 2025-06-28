@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 80a348055de3b7b49a5128e3e1a6a8d4, type: 3}
+  m_Name: tutorial_dde8d265ee6d473c9e0d5d30acb3d7f7
+  m_EditorClassIdentifier: 
+  Id: tutorial_dde8d265ee6d473c9e0d5d30acb3d7f7
+  CategoryId: category_70d23546c0a643f58a815f5c9f26fe83
+  Title: New Tutorial 4
+  Description: Tutorial description
+  OnlyShowOnce: 1
+  RequiredLevel: 0
+  Dependencies: []
+  StartConditions: []
+  Steps: []
