@@ -173,10 +173,38 @@ namespace UnityHelperSDK.Tutorial
             EditorGUILayout.LabelField("Category Settings", EditorStyles.boldLabel);
             EditorGUI.BeginChangeCheck();
 
-            // Direct field editing instead of using SerializedObject
+            string newId = EditorGUILayout.TextField("ID", category.Id);
             string newName = EditorGUILayout.TextField("Name", category.Name);
             string newDescription = EditorGUILayout.TextField("Description", category.Description);
             int newSortOrder = EditorGUILayout.IntField("Sort Order", category.SortOrder);
+
+            // If ID changed and is unique, update dictionary and asset name
+            if (newId != category.Id && !_categories.ContainsKey(newId) && !string.IsNullOrWhiteSpace(newId))
+            {
+                string oldId = category.Id;
+                category.Id = newId;
+                _categories.Remove(oldId);
+                _categories[newId] = category;
+                string oldPath = AssetDatabase.GetAssetPath(category);
+                if (!string.IsNullOrEmpty(oldPath))
+                {
+                    string newPath = oldPath.Replace(oldId, newId);
+                    AssetDatabase.RenameAsset(oldPath, newId);
+                    AssetDatabase.MoveAsset(oldPath, newPath);
+                }
+                _selectedCategory = newId;
+                _isDirty = true;
+            }
+
+            // Apply field changes to ScriptableObject
+            if (EditorGUI.EndChangeCheck())
+            {
+                if (category.Name != newName) category.Name = newName;
+                if (category.Description != newDescription) category.Description = newDescription;
+                if (category.SortOrder != newSortOrder) category.SortOrder = newSortOrder;
+                EditorUtility.SetDirty(category);
+                _isDirty = true;
+            }
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Tutorials in Category", EditorStyles.boldLabel);
@@ -250,14 +278,39 @@ namespace UnityHelperSDK.Tutorial
             EditorGUILayout.LabelField("Tutorial Settings", EditorStyles.boldLabel);
             EditorGUI.BeginChangeCheck();
 
-            EditorGUI.BeginDisabledGroup(true);
-            EditorGUILayout.TextField("ID", tutorial.Id);
-            EditorGUI.EndDisabledGroup();
+            string newId = EditorGUILayout.TextField("ID", tutorial.Id);
+            if (newId != tutorial.Id && !_tutorials.ContainsKey(newId) && !string.IsNullOrWhiteSpace(newId))
+            {
+                string oldId = tutorial.Id;
+                tutorial.Id = newId;
+                _tutorials.Remove(oldId);
+                _tutorials[newId] = tutorial;
+                string oldPath = AssetDatabase.GetAssetPath(tutorial);
+                if (!string.IsNullOrEmpty(oldPath))
+                {
+                    string newPath = oldPath.Replace(oldId, newId);
+                    AssetDatabase.RenameAsset(oldPath, newId);
+                    AssetDatabase.MoveAsset(oldPath, newPath);
+                }
+                _selectedTutorial = newId;
+                _isDirty = true;
+            }
 
             string newTitle = EditorGUILayout.TextField("Title", tutorial.Title);
             string newDescription = EditorGUILayout.TextField("Description", tutorial.Description);
             int newRequiredLevel = EditorGUILayout.IntField("Required Level", tutorial.RequiredLevel);
             bool newOnlyShowOnce = EditorGUILayout.Toggle("Only Show Once", tutorial.OnlyShowOnce);
+
+            // Apply field changes to ScriptableObject
+            if (EditorGUI.EndChangeCheck())
+            {
+                if (tutorial.Title != newTitle) tutorial.Title = newTitle;
+                if (tutorial.Description != newDescription) tutorial.Description = newDescription;
+                if (tutorial.RequiredLevel != newRequiredLevel) tutorial.RequiredLevel = newRequiredLevel;
+                if (tutorial.OnlyShowOnce != newOnlyShowOnce) tutorial.OnlyShowOnce = newOnlyShowOnce;
+                EditorUtility.SetDirty(tutorial);
+                _isDirty = true;
+            }
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Dependencies", EditorStyles.boldLabel);
@@ -595,11 +648,14 @@ namespace UnityHelperSDK.Tutorial
 
         private void AddNewCategory()
         {
-            var newId = "category_" + Guid.NewGuid().ToString("N");
-            var assetPath = $"Assets/Resources/Tutorials/{newId}.asset";
+            // Count existing TutorialCategory assets
+            var guids = AssetDatabase.FindAssets("t:TutorialCategory", new[] { TUTORIALS_PATH });
+            int nextNumber = guids.Length + 1;
+            string newId = $"category_{nextNumber}";
+            string assetPath = $"{TUTORIALS_PATH}/{newId}.asset";
             var category = ScriptableObject.CreateInstance<TutorialCategory>();
             category.Id = newId;
-            category.Name = $"New Category {_categories.Count + 1}";
+            category.Name = $"New Category {nextNumber}";
             category.Description = "New category description";
             category.SortOrder = _categories.Count;
             AssetDatabase.CreateAsset(category, assetPath);
@@ -619,24 +675,15 @@ namespace UnityHelperSDK.Tutorial
                 EditorUtility.DisplayDialog("Error", "Please select or create a category first.", "OK");
                 return;
             }
-            // Find the next available tutorial number
-            int nextNumber = 1;
-            var existingNumbers = _tutorials.Keys
-                .Select(id => {
-                    var match = System.Text.RegularExpressions.Regex.Match(id, @"^tutorial_(\d+)$");
-                    return match.Success ? int.Parse(match.Groups[1].Value) : (int?)null;
-                })
-                .Where(n => n.HasValue)
-                .Select(n => n.Value)
-                .ToHashSet();
-            while (existingNumbers.Contains(nextNumber))
-                nextNumber++;
-            var newId = $"tutorial_{nextNumber}";
-            var assetPath = $"Assets/Resources/Tutorials/{newId}.asset";
+            // Count existing TutorialDefinition assets
+            var guids = AssetDatabase.FindAssets("t:TutorialDefinition", new[] { TUTORIALS_PATH });
+            int nextNumber = guids.Length + 1;
+            string newId = $"tutorial_{nextNumber}";
+            string assetPath = $"{TUTORIALS_PATH}/{newId}.asset";
             var tutorial = ScriptableObject.CreateInstance<TutorialDefinition>();
             tutorial.Id = newId;
             tutorial.CategoryId = selectedCategoryId;
-            tutorial.Title = $"New Tutorial {_tutorials.Count + 1}";
+            tutorial.Title = $"New Tutorial {nextNumber}";
             tutorial.Description = "Tutorial description";
             AssetDatabase.CreateAsset(tutorial, assetPath);
             AssetDatabase.SaveAssets();

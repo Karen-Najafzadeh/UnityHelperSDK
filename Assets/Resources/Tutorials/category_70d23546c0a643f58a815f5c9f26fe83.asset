@@ -16,4 +16,6 @@ MonoBehaviour:
   Name: New Category 1
   Description: New category description
   SortOrder: 0
-  TutorialIds: []
+  TutorialIds:
+  - tutorial_dde8d265ee6d473c9e0d5d30acb3d7f7
+  - tutorial_5
