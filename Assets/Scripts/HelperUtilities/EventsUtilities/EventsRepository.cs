@@ -12,7 +12,7 @@ namespace UnityHelperSDK.Events
     /// Feel free to extend this class with additional events as needed.
     /// For more examples, refer to the TutorialEvents.cs file.
     /// </summary>
-    
+
     #region Event Categories
     public static class EventCategories
     {
@@ -26,8 +26,8 @@ namespace UnityHelperSDK.Events
 
         // Add more categories as needed
     }
-#endregion
-#region Event Definitions
+    #endregion
+    #region Event Definitions
     // System Events
 
     // simple event with no data
@@ -59,6 +59,27 @@ namespace UnityHelperSDK.Events
         public int[] teamScores;
         public string[] achievementsUnlocked;
         public string replayFilePath;
+    }
+    
+
+    /// <summary>Fired when a UI button is clicked.</summary>
+    public struct OnUIButtonPressed
+    {
+        public string ButtonName;
+        public OnUIButtonPressed(string buttonName)
+        {
+            ButtonName = buttonName;
+        }
+    }
+
+    /// <summary>Fired when a new scene has finished loading.</summary>
+    public struct OnSceneLoadedEvent
+    {
+        public string SceneName;
+        public OnSceneLoadedEvent(string sceneName)
+        {
+            SceneName = sceneName;
+        }
     }
 
     // add as much events as you want! these above are just examples.
