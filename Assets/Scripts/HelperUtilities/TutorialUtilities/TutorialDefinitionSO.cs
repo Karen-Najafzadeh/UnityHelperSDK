@@ -10,6 +10,8 @@ public class TutorialDefinitionSO : ScriptableObject
     public string TutorialID;
     public TriggerDefinitionSO InitialTrigger;
     public StepDefinitionSO[] Steps;
+    public UnityHelperSDK.TutorialUtilities.ConditionSO[] StartConditions;      // New: conditions to start this tutorial
+    public UnityHelperSDK.TutorialUtilities.ConditionSO[] CompleteConditions;   // New: conditions to complete this tutorial
 }
 
 // Each Step SO holds its content and completion triggers
@@ -21,6 +23,8 @@ public class StepDefinitionSO : ScriptableObject
     [TextArea] public string Body;
     public Sprite Icon;
     public TriggerDefinitionSO[] CompletionTriggers;
+    public UnityHelperSDK.TutorialUtilities.ConditionSO[] StartConditions;      // New: conditions to start this step
+    public UnityHelperSDK.TutorialUtilities.ConditionSO[] CompleteConditions;   // New: conditions to complete this step
 }
 
 // A generic wrapper for different trigger types
@@ -56,6 +60,34 @@ namespace UnityHelperSDK.TutorialUtilities
 {
     [System.Serializable]
     public class TriggerParameter
+    {
+        public string Key;
+        public string StringValue;
+        public float FloatValue;
+        public int IntValue;
+        public bool BoolValue;
+        public UnityEngine.Object ObjectValue;
+    }
+
+    [System.Serializable]
+    public class ConditionSO : ScriptableObject
+    {
+        public string ConditionID;
+        public ConditionType Type;
+        public ConditionParameter[] Parameters;   // Strongly-typed parameters
+    }
+
+    public enum ConditionType
+    {
+        // Define your condition types here
+        PlayerHasItem,
+        EnemyDefeated,
+        TimeElapsed,
+        // Add more as needed
+    }
+
+    [System.Serializable]
+    public class ConditionParameter
     {
         public string Key;
         public string StringValue;
