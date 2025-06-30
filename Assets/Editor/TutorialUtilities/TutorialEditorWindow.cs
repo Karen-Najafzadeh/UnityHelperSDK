@@ -20,13 +20,10 @@ namespace UnityHelperSDK.Tutorial
     public class TutorialEditorWindow : EditorWindow
     {
         private const string TUTORIALS_PATH = "Assets/Resources/Tutorials";
-        private Dictionary<string, TutorialCategory> _categories;
-        private Dictionary<string, TutorialDefinition> _tutorials;
+        private List<TutorialDefinitionSO> _tutorialAssets;
         private Vector2 _scrollPosition;
         private bool _isDirty;
-        private string _selectedCategory;
         private string _selectedTutorial;
-        private TutorialTreeView _treeView;
         private IMGUIContainer _inspectorContainer;
         private Dictionary<int, bool> _stepFoldouts = new();
         private Dictionary<(int, int), bool> _conditionFoldouts = new();
@@ -50,59 +47,33 @@ namespace UnityHelperSDK.Tutorial
         private void CreateUI()
         {
             var root = rootVisualElement;
-            
-            // Create a split view
-            var splitView = new TwoPaneSplitView(0, 250, TwoPaneSplitViewOrientation.Horizontal);
-            root.Add(splitView);
-
-            // Left side - Tree view
-            _treeView = new TutorialTreeView(_categories, _tutorials);
-            _treeView.OnTutorialSelectionChanged += OnTutorialSelected;
-            splitView.Add(_treeView);
-
-            // Right side - Inspector
+            root.Clear();
+            // Only show a flat list for now
             _inspectorContainer = new IMGUIContainer(DrawInspector);
-            splitView.Add(_inspectorContainer);
-
+            root.Add(_inspectorContainer);
             // Toolbar
             var toolbar = new Toolbar();
-            
             var saveButton = new ToolbarButton(() => SaveTutorialData()) { text = "Save" };
             toolbar.Add(saveButton);
-            
             var refreshButton = new ToolbarButton(() => LoadTutorialData()) { text = "Refresh" };
             toolbar.Add(refreshButton);
-
-            var addCategoryButton = new ToolbarButton(() => AddNewCategory()) { text = "Add Category" };
-            toolbar.Add(addCategoryButton);
-
             var addTutorialButton = new ToolbarButton(() => AddNewTutorial()) { text = "Add Tutorial" };
             toolbar.Add(addTutorialButton);
-
             root.Insert(0, toolbar);
         }        
-        private void OnTutorialSelected(string categoryId, string tutorialId)
+        private void OnTutorialSelected(string tutorialId)
         {
-            Debug.Log($"[TutorialEditorWindow] OnTutorialSelected - Category: {categoryId}, Tutorial: {tutorialId}");
+            Debug.Log($"[TutorialEditorWindow] OnTutorialSelected - Tutorial: {tutorialId}");
             
             // Clear previous selection first
-            _selectedCategory = null;
             _selectedTutorial = null;
 
             // Update selection based on what was clicked
-            if (!string.IsNullOrEmpty(tutorialId) && _tutorials.ContainsKey(tutorialId))
+            if (!string.IsNullOrEmpty(tutorialId) && _tutorialAssets.Any(t => t.TutorialID == tutorialId))
             {
-                // A tutorial was selected - verify it exists and get its category
-                var tutorial = _tutorials[tutorialId];
+                // A tutorial was selected - verify it exists
                 _selectedTutorial = tutorialId;
-                _selectedCategory = tutorial.CategoryId; // Use the category from the tutorial itself
-                Debug.Log($"[TutorialEditorWindow] Selected tutorial {tutorialId} in category {_selectedCategory}");
-            }
-            else if (!string.IsNullOrEmpty(categoryId) && _categories.ContainsKey(categoryId))
-            {
-                // A category was selected - verify it exists
-                _selectedCategory = categoryId;
-                Debug.Log($"[TutorialEditorWindow] Selected category {categoryId}");
+                Debug.Log($"[TutorialEditorWindow] Selected tutorial {tutorialId}");
             }
             else
             {
@@ -121,34 +92,16 @@ namespace UnityHelperSDK.Tutorial
             // If a tutorial is selected
             if (!string.IsNullOrEmpty(_selectedTutorial))
             {
-                if (_tutorials.TryGetValue(_selectedTutorial, out var tutorial))
+                var tutorial = _tutorialAssets.FirstOrDefault(t => t.TutorialID == _selectedTutorial);
+                if (tutorial != null)
                 {
-                    // Show parent category information in a foldout
-                    if (_categories.TryGetValue(_selectedCategory, out var category))
-                    {
-                        using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
-                        {
-                            EditorGUILayout.LabelField("Category:", GUILayout.Width(70));
-                            EditorGUILayout.LabelField(category.Name, EditorStyles.boldLabel);
-                        }
-                        EditorGUILayout.Space();
-                    }
-
                     // Draw the tutorial inspector
                     DrawTutorialInspector(tutorial);
                 }
             }
-            // If only a category is selected
-            else if (!string.IsNullOrEmpty(_selectedCategory))
+            else
             {
-                if (_categories.TryGetValue(_selectedCategory, out var category))
-                {
-                    DrawCategoryInspector(category);
-                }
-            }
-            else if (string.IsNullOrEmpty(_selectedCategory) && string.IsNullOrEmpty(_selectedTutorial))
-            {
-                EditorGUILayout.HelpBox("Select a tutorial or category to edit", MessageType.Info);
+                EditorGUILayout.HelpBox("Select a tutorial to edit", MessageType.Info);
                 EditorGUILayout.EndScrollView();
                 return;
             }
@@ -168,535 +121,89 @@ namespace UnityHelperSDK.Tutorial
             }
         }
 
-        private void DrawCategoryInspector(TutorialCategory category)
+        private void DrawTutorialInspector(TutorialDefinitionSO tutorial)
         {
-            EditorGUILayout.LabelField("Category Settings", EditorStyles.boldLabel);
-            EditorGUI.BeginChangeCheck();
+            // If using TutorialDefinitionSO ScriptableObject:
+            var so = new SerializedObject(tutorial);
+            so.Update();
 
-            string newId = EditorGUILayout.TextField("ID", category.Id);
-            string newName = EditorGUILayout.TextField("Name", category.Name);
-            string newDescription = EditorGUILayout.TextField("Description", category.Description);
-            int newSortOrder = EditorGUILayout.IntField("Sort Order", category.SortOrder);
-
-            // If ID changed and is unique, update dictionary and asset name
-            if (newId != category.Id && !_categories.ContainsKey(newId) && !string.IsNullOrWhiteSpace(newId))
-            {
-                string oldId = category.Id;
-                category.Id = newId;
-                _categories.Remove(oldId);
-                _categories[newId] = category;
-                string oldPath = AssetDatabase.GetAssetPath(category);
-                if (!string.IsNullOrEmpty(oldPath))
-                {
-                    string newPath = oldPath.Replace(oldId, newId);
-                    AssetDatabase.RenameAsset(oldPath, newId);
-                    AssetDatabase.MoveAsset(oldPath, newPath);
-                }
-                _selectedCategory = newId;
-                _isDirty = true;
-            }
-
-            // Apply field changes to ScriptableObject
-            if (EditorGUI.EndChangeCheck())
-            {
-                if (category.Name != newName) category.Name = newName;
-                if (category.Description != newDescription) category.Description = newDescription;
-                if (category.SortOrder != newSortOrder) category.SortOrder = newSortOrder;
-                EditorUtility.SetDirty(category);
-                _isDirty = true;
-            }
-
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Tutorials in Category", EditorStyles.boldLabel);
-
-            var tutorialIds = category.TutorialIds;
-            if (tutorialIds.Count > 0)
-            {
-                EditorGUI.indentLevel++;
-                for (int i = 0; i < tutorialIds.Count; i++)
-                {
-                    EditorGUILayout.BeginHorizontal();
-                    var tutorialId = tutorialIds[i];
-                    if (_tutorials.TryGetValue(tutorialId, out var tutorial))
-                    {
-                        EditorGUILayout.LabelField($"{i + 1}. {tutorial.Title}");
-                    }
-                    else
-                    {
-                        EditorGUILayout.LabelField($"{i + 1}. [Missing Tutorial]");
-                    }
-                    
-                    if (GUILayout.Button("Remove", GUILayout.Width(60)))
-                    {
-                        tutorialIds.RemoveAt(i);
-                        _isDirty = true;
-                        break;
-                    }
-                    EditorGUILayout.EndHorizontal();
-                }
-                EditorGUI.indentLevel--;
-            }
-            else
-            {
-                EditorGUILayout.HelpBox("No tutorials in this category", MessageType.Info);
-            }
-
-            EditorGUILayout.Space();
-            if (GUILayout.Button("Delete Category"))
-            {
-                if (EditorUtility.DisplayDialog("Delete Category", 
-                    "Are you sure you want to delete this category? This will not delete the tutorials in it.", 
-                    "Delete", "Cancel"))
-                {
-                    string assetPath = AssetDatabase.GetAssetPath(category);
-                    if (!string.IsNullOrEmpty(assetPath))
-                    {
-                        AssetDatabase.DeleteAsset(assetPath);
-                    }
-                    _categories.Remove(category.Id);
-                    _selectedCategory = null;
-                    _selectedTutorial = null;
-                    _isDirty = false;
-                    _treeView?.Refresh(_categories, _tutorials);
-                    return;
-                }
-            }
-
-            // if (EditorGUI.EndChangeCheck())
-            // {
-            //     // Update category fields if changed
-            //     if (newName != category.Name || newDescription != category.Description || newSortOrder != category.SortOrder)
-            //     {
-            //         category.Initialize(category.Id, newName, newDescription, newSortOrder);
-            //         _isDirty = true;
-            //     }
-            // }
-        }
-
-        private void DrawTutorialInspector(TutorialDefinition tutorial)
-        {
             EditorGUILayout.LabelField("Tutorial Settings", EditorStyles.boldLabel);
-            EditorGUI.BeginChangeCheck();
-
-            string newId = EditorGUILayout.TextField("ID", tutorial.Id);
-            if (newId != tutorial.Id && !_tutorials.ContainsKey(newId) && !string.IsNullOrWhiteSpace(newId))
-            {
-                string oldId = tutorial.Id;
-                tutorial.Id = newId;
-                _tutorials.Remove(oldId);
-                _tutorials[newId] = tutorial;
-                string oldPath = AssetDatabase.GetAssetPath(tutorial);
-                if (!string.IsNullOrEmpty(oldPath))
-                {
-                    string newPath = oldPath.Replace(oldId, newId);
-                    AssetDatabase.RenameAsset(oldPath, newId);
-                    AssetDatabase.MoveAsset(oldPath, newPath);
-                }
-                _selectedTutorial = newId;
-                _isDirty = true;
-            }
-
-            string newTitle = EditorGUILayout.TextField("Title", tutorial.Title);
-            string newDescription = EditorGUILayout.TextField("Description", tutorial.Description);
-            int newRequiredLevel = EditorGUILayout.IntField("Required Level", tutorial.RequiredLevel);
-            bool newOnlyShowOnce = EditorGUILayout.Toggle("Only Show Once", tutorial.OnlyShowOnce);
-
-            // Apply field changes to ScriptableObject
-            if (EditorGUI.EndChangeCheck())
-            {
-                if (tutorial.Title != newTitle) tutorial.Title = newTitle;
-                if (tutorial.Description != newDescription) tutorial.Description = newDescription;
-                if (tutorial.RequiredLevel != newRequiredLevel) tutorial.RequiredLevel = newRequiredLevel;
-                if (tutorial.OnlyShowOnce != newOnlyShowOnce) tutorial.OnlyShowOnce = newOnlyShowOnce;
-                EditorUtility.SetDirty(tutorial);
-                _isDirty = true;
-            }
-
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Dependencies", EditorStyles.boldLabel);
-            
-            var dependencies = tutorial.Dependencies;
-            if (dependencies.Count > 0)
-            {
-                EditorGUI.indentLevel++;
-                for (int i = 0; i < dependencies.Count; i++)
-                {
-                    EditorGUILayout.BeginHorizontal();
-                    if (_tutorials.TryGetValue(dependencies[i], out var depTutorial))
-                    {
-                        EditorGUILayout.LabelField($"{i + 1}. {depTutorial.Title}");
-                    }
-                    else
-                    {
-                        EditorGUILayout.LabelField($"{i + 1}. [Missing Tutorial]");
-                    }
-                    
-                    if (GUILayout.Button("Remove", GUILayout.Width(60)))
-                    {
-                        dependencies.RemoveAt(i);
-                        _isDirty = true;
-                        break;
-                    }
-                    EditorGUILayout.EndHorizontal();
-                }
-                EditorGUI.indentLevel--;
-            }
+            EditorGUILayout.PropertyField(so.FindProperty("TutorialID"), new GUIContent("ID"));
+            EditorGUILayout.PropertyField(so.FindProperty("InitialTrigger"), new GUIContent("Initial Trigger"));
+            EditorGUILayout.PropertyField(so.FindProperty("Steps"), new GUIContent("Steps"), true);
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Start Conditions", EditorStyles.boldLabel);
-            var startConditions = tutorial.StartConditions;
-            if (startConditions.Count > 0)
+            EditorGUILayout.PropertyField(so.FindProperty("StartConditions"), new GUIContent("Start Conditions"), true);
+            if (GUILayout.Button("Create New Start Condition"))
             {
-                EditorGUI.indentLevel++;
-                for (int i = 0; i < startConditions.Count; i++)
+                var newCond = ScriptableObject.CreateInstance<UnityHelperSDK.TutorialUtilities.ConditionSO>();
+                string path = EditorUtility.SaveFilePanelInProject("Create ConditionSO", "NewStartCondition", "asset", "");
+                if (!string.IsNullOrEmpty(path))
                 {
-                    if (!_conditionFoldouts.ContainsKey((-1, i))) _conditionFoldouts[(-1, i)] = false;
-                    _conditionFoldouts[(-1, i)] = EditorGUIHelper.FoldoutSection($"Start Condition {i + 1}", _conditionFoldouts[(-1, i)]);
-                    if (_conditionFoldouts[(-1, i)])
-                    {
-                        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-                        var condition = startConditions[i];
-                        condition.EventId = EditorGUILayout.TextField("Event ID", condition.EventId);
-                        condition.ConditionType = (UnityHelperSDK.Tutorial.TutorialConditionType)EditorGUILayout.EnumPopup("Condition Type", condition.ConditionType);
-                        EditorGUILayout.LabelField("Parameters");
-                        EditorGUI.indentLevel++;
-                        if (condition.Parameters == null) condition.Parameters = new string[0];
-                        for (int p = 0; p < condition.Parameters.Length; p++)
-                        {
-                            EditorGUILayout.BeginHorizontal();
-                            condition.Parameters[p] = EditorGUILayout.TextField($"Parameter {p + 1}", condition.Parameters[p]);
-                            if (GUILayout.Button("-", GUILayout.Width(20)))
-                            {
-                                var newParams = condition.Parameters.ToList();
-                                newParams.RemoveAt(p);
-                                condition.Parameters = newParams.ToArray();
-                                _isDirty = true;
-                                break;
-                            }
-                            EditorGUILayout.EndHorizontal();
-                        }
-                        if (GUILayout.Button("Add Parameter"))
-                        {
-                            var newParams = condition.Parameters.ToList();
-                            newParams.Add("");
-                            condition.Parameters = newParams.ToArray();
-                            _isDirty = true;
-                        }
-                        EditorGUI.indentLevel--;
-                        if (GUILayout.Button("Remove Condition"))
-                        {
-                            startConditions.RemoveAt(i);
-                            _isDirty = true;
-                            break;
-                        }
-                        EditorGUILayout.EndVertical();
-                    }
+                    AssetDatabase.CreateAsset(newCond, path);
+                    AssetDatabase.SaveAssets();
                 }
-                EditorGUI.indentLevel--;
-            }
-            if (GUILayout.Button("Add Start Condition"))
-            {
-                startConditions.Add(new TutorialConditionData { EventId = "", ConditionType = UnityHelperSDK.Tutorial.TutorialConditionType.Start, Parameters = new string[0] });
-                _isDirty = true;
             }
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Tutorial Steps", EditorStyles.boldLabel);
-            var steps = tutorial.Steps;
-            if (steps.Count > 0)
+            EditorGUILayout.LabelField("Complete Conditions", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(so.FindProperty("CompleteConditions"), new GUIContent("Complete Conditions"), true);
+            if (GUILayout.Button("Create New Complete Condition"))
             {
-                EditorGUILayout.BeginHorizontal();
-                GUILayout.FlexibleSpace();
-                if (GUILayout.Button("Collapse All Steps", GUILayout.Width(150)))
+                var newCond = ScriptableObject.CreateInstance<UnityHelperSDK.TutorialUtilities.ConditionSO>();
+                string path = EditorUtility.SaveFilePanelInProject("Create ConditionSO", "NewCompleteCondition", "asset", "");
+                if (!string.IsNullOrEmpty(path))
                 {
-                    _expandedStep = -1;
-                    _expandedCondition.Clear();
-                }
-                EditorGUILayout.EndHorizontal();
-                EditorGUI.indentLevel++;
-                for (int i = 0; i < steps.Count; i++)
-                {
-                    bool expanded = _expandedStep == i;
-                    var step = steps[i];
-                    if (GUILayout.Button($"{(expanded ? "▼" : "►")} Step {i + 1}: {step.DialogueKey}", EditorStyles.foldout))
-                    {
-                        _expandedStep = expanded ? -1 : i;
-                        _expandedCondition.Clear();
-                    }
-                    if (expanded)
-                    {
-                        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-                        step.Id = EditorGUILayout.TextField("Step ID", step.Id);
-                        step.DialogueKey = EditorGUILayout.TextField("Dialogue Key", step.DialogueKey);
-                        step.TargetObject = EditorGUILayout.ObjectField("Target Object", step.TargetObject, typeof(GameObject), true) as GameObject;
-                        EditorGUILayout.Space();
-                        EditorGUILayout.LabelField("Step Conditions", EditorStyles.boldLabel);
-                        var conditions = step.Conditions ??= new List<TutorialConditionData>();
-                        if (conditions.Count > 0)
-                        {
-                            EditorGUILayout.BeginHorizontal();
-                            GUILayout.FlexibleSpace();
-                            if (GUILayout.Button("Collapse All Conditions", GUILayout.Width(180)))
-                                _expandedCondition[i] = -1;
-                            EditorGUILayout.EndHorizontal();
-                        }
-                        for (int c = 0; c < conditions.Count; c++)
-                        {
-                            bool condExpanded = _expandedCondition.TryGetValue(i, out int idx) && idx == c;
-                            if (GUILayout.Button($"{(condExpanded ? "▼" : "►")} Condition {c + 1}", EditorStyles.foldout))
-                                _expandedCondition[i] = condExpanded ? -1 : c;
-                            if (condExpanded)
-                            {
-                                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-                                var condition = conditions[c];
-                                condition.EventId = EditorGUILayout.TextField("Event ID", condition.EventId);
-                                condition.ConditionType = (UnityHelperSDK.Tutorial.TutorialConditionType)EditorGUILayout.EnumPopup("Condition Type", condition.ConditionType);
-                                EditorGUILayout.LabelField("Parameters");
-                                EditorGUI.indentLevel++;
-                                if (condition.Parameters == null) condition.Parameters = new string[0];
-                                for (int p = 0; p < condition.Parameters.Length; p++)
-                                {
-                                    EditorGUILayout.BeginHorizontal();
-                                    condition.Parameters[p] = EditorGUILayout.TextField($"Parameter {p + 1}", condition.Parameters[p]);
-                                    if (GUILayout.Button("-", GUILayout.Width(20)))
-                                    {
-                                        var newParams = condition.Parameters.ToList();
-                                        newParams.RemoveAt(p);
-                                        condition.Parameters = newParams.ToArray();
-                                        _isDirty = true;
-                                        break;
-                                    }
-                                    EditorGUILayout.EndHorizontal();
-                                }
-                                if (GUILayout.Button("Add Parameter"))
-                                {
-                                    var newParams = condition.Parameters.ToList();
-                                    newParams.Add("");
-                                    condition.Parameters = newParams.ToArray();
-                                    _isDirty = true;
-                                }
-                                EditorGUI.indentLevel--;
-                                if (GUILayout.Button("Remove Condition"))
-                                {
-                                    conditions.RemoveAt(c);
-                                    _isDirty = true;
-                                    break;
-                                }
-                                EditorGUILayout.EndVertical();
-                            }
-                        }
-                        if (GUILayout.Button("Add Step Condition"))
-                        {
-                            step.Conditions.Add(new TutorialConditionData { EventId = "", ConditionType = UnityHelperSDK.Tutorial.TutorialConditionType.Step, Parameters = new string[0] });
-                            _isDirty = true;
-                        }
-                        EditorGUILayout.Space();
-                        EditorGUILayout.LabelField("Completion Condition", EditorStyles.boldLabel);
-                        if (step.CompletionCondition == null)
-                        {
-                            if (GUILayout.Button("Add Completion Condition"))
-                            {
-                                step.CompletionCondition = new TutorialConditionData { EventId = "", ConditionType = UnityHelperSDK.Tutorial.TutorialConditionType.Step, Parameters = new string[0] };
-                                _isDirty = true;
-                            }
-                        }
-                        else
-                        {
-                            var completion = step.CompletionCondition;
-                            completion.EventId = EditorGUILayout.TextField("Event ID", completion.EventId);
-                            completion.ConditionType = (UnityHelperSDK.Tutorial.TutorialConditionType)EditorGUILayout.EnumPopup("Condition Type", completion.ConditionType);
-                            EditorGUILayout.LabelField("Parameters");
-                            EditorGUI.indentLevel++;
-                            if (completion.Parameters == null) completion.Parameters = new string[0];
-                            for (int p = 0; p < completion.Parameters.Length; p++)
-                            {
-                                EditorGUILayout.BeginHorizontal();
-                                completion.Parameters[p] = EditorGUILayout.TextField($"Parameter {p + 1}", completion.Parameters[p]);
-                                if (GUILayout.Button("-", GUILayout.Width(20)))
-                                {
-                                    var newParams = completion.Parameters.ToList();
-                                    newParams.RemoveAt(p);
-                                    completion.Parameters = newParams.ToArray();
-                                    _isDirty = true;
-                                    break;
-                                }
-                                EditorGUILayout.EndHorizontal();
-                            }
-                            if (GUILayout.Button("Add Parameter"))
-                            {
-                                var newParams = completion.Parameters.ToList();
-                                newParams.Add("");
-                                completion.Parameters = newParams.ToArray();
-                                _isDirty = true;
-                            }
-                            EditorGUI.indentLevel--;
-                            if (GUILayout.Button("Remove Completion Condition"))
-                            {
-                                step.CompletionCondition = null;
-                                _isDirty = true;
-                            }
-                        }
-                        if (GUILayout.Button("Remove Step"))
-                        {
-                            steps.RemoveAt(i);
-                            _isDirty = true;
-                            break;
-                        }
-                        EditorGUILayout.EndVertical();
-                    }
-                }
-                EditorGUI.indentLevel--;
-            }
-            if (GUILayout.Button("Add Step"))
-            {
-                steps.Add(new TutorialStepData { Id = "", DialogueKey = "", Conditions = new List<TutorialConditionData>() });
-                _isDirty = true;
-            }
-            EditorGUILayout.Space();
-            if (GUILayout.Button("Add Dependency"))
-            {
-                var dependencyMenu = new GenericMenu();
-                foreach (var kvp in _tutorials)
-                {
-                    if (kvp.Key != tutorial.Id && !tutorial.Dependencies.Contains(kvp.Key))
-                    {
-                        dependencyMenu.AddItem(new GUIContent(kvp.Value.Title), false, () =>
-                        {
-                            tutorial.Dependencies.Add(kvp.Key);
-                            _isDirty = true;
-                        });
-                    }
-                }
-                dependencyMenu.ShowAsContext();
-            }
-            if (GUILayout.Button("Delete Tutorial"))
-            {
-                if (EditorUtility.DisplayDialog("Delete Tutorial", "Are you sure you want to delete this tutorial?", "Delete", "Cancel"))
-                {
-                    if (_categories.TryGetValue(tutorial.CategoryId, out var category))
-                    {
-                        category.TutorialIds.Remove(tutorial.Id);
-                        EditorUtility.SetDirty(category);
-                    }
-                    string assetPath = AssetDatabase.GetAssetPath(tutorial);
-                    if (!string.IsNullOrEmpty(assetPath))
-                    {
-                        AssetDatabase.DeleteAsset(assetPath);
-                    }
-                    _tutorials.Remove(tutorial.Id);
-                    _selectedCategory = null;
-                    _selectedTutorial = null;
-                    _isDirty = false;
-                    _treeView?.Refresh(_categories, _tutorials);
-                    return;
+                    AssetDatabase.CreateAsset(newCond, path);
+                    AssetDatabase.SaveAssets();
                 }
             }
-
-            // if (EditorGUI.EndChangeCheck())
-            // {
-            //     if (newTitle != tutorial.Title || 
-            //         newDescription != tutorial.Description || 
-            //         newRequiredLevel != tutorial.RequiredLevel || 
-            //         newOnlyShowOnce != tutorial.OnlyShowOnce)
-            //     {
-            //         tutorial.Initialize(
-            //             tutorial.Id,
-            //             tutorial.CategoryId,
-            //             newTitle,
-            //             newDescription,
-            //             newRequiredLevel,
-            //             newOnlyShowOnce
-            //         );
-            //         _isDirty = true;
-            //     }
-            // }
+            so.ApplyModifiedProperties();
         }          
         private void LoadTutorialData()
         {
             Debug.Log("[TutorialEditorWindow] Loading ScriptableObject tutorial data...");
-            _categories = new Dictionary<string, TutorialCategory>();
-            _tutorials = new Dictionary<string, TutorialDefinition>();
-
-            // Load all ScriptableObject assets from Resources/Tutorials
-            foreach (var cat in TutorialCategory.LoadAllCategories())
+            _tutorialAssets = new List<TutorialDefinitionSO>();
+            string[] guids = AssetDatabase.FindAssets("t:TutorialDefinitionSO", new[] { TUTORIALS_PATH });
+            foreach (var guid in guids)
             {
-                if (!string.IsNullOrEmpty(cat.Id))
-                    _categories[cat.Id] = cat;
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var asset = AssetDatabase.LoadAssetAtPath<TutorialDefinitionSO>(path);
+                if (asset != null)
+                    _tutorialAssets.Add(asset);
             }
-            foreach (var tut in TutorialDefinition.LoadAllDefinitions())
-            {
-                if (!string.IsNullOrEmpty(tut.Id))
-                    _tutorials[tut.Id] = tut;
-            }
-
-            _selectedCategory = null;
             _selectedTutorial = null;
             _isDirty = false;
-            _treeView?.Refresh(_categories, _tutorials);
+            // Optionally, refresh tree view if you want to show a list of tutorials
+            // _treeView?.Refresh(_tutorialAssets);
             Repaint();
         }
 
         private void SaveTutorialData()
         {
-            // No-op: ScriptableObjects are saved as assets, not as JSON.
             AssetDatabase.SaveAssets();
             _isDirty = false;
-            _treeView?.Refresh(_categories, _tutorials);
+            // _treeView?.Refresh(_tutorialAssets);
             Debug.Log("[TutorialEditorWindow] ScriptableObject tutorial data saved!");
             AssetDatabase.Refresh();
             Repaint();
         }
 
-        private void AddNewCategory()
-        {
-            // Count existing TutorialCategory assets
-            var guids = AssetDatabase.FindAssets("t:TutorialCategory", new[] { TUTORIALS_PATH });
-            int nextNumber = guids.Length + 1;
-            string newId = $"category_{nextNumber}";
-            string assetPath = $"{TUTORIALS_PATH}/{newId}.asset";
-            var category = ScriptableObject.CreateInstance<TutorialCategory>();
-            category.Id = newId;
-            category.Name = $"New Category {nextNumber}";
-            category.Description = "New category description";
-            category.SortOrder = _categories.Count;
-            AssetDatabase.CreateAsset(category, assetPath);
-            AssetDatabase.SaveAssets();
-            _categories[category.Id] = category;
-            _isDirty = false;
-            _selectedCategory = category.Id;
-            _selectedTutorial = null;
-            _treeView?.Refresh(_categories, _tutorials);
-        }
-
         private void AddNewTutorial()
         {
-            var selectedCategoryId = _selectedCategory ?? _categories.Keys.FirstOrDefault();
-            if (string.IsNullOrEmpty(selectedCategoryId))
-            {
-                EditorUtility.DisplayDialog("Error", "Please select or create a category first.", "OK");
-                return;
-            }
-            // Count existing TutorialDefinition assets
-            var guids = AssetDatabase.FindAssets("t:TutorialDefinition", new[] { TUTORIALS_PATH });
+            // Count existing TutorialDefinitionSO assets
+            var guids = AssetDatabase.FindAssets("t:TutorialDefinitionSO", new[] { TUTORIALS_PATH });
             int nextNumber = guids.Length + 1;
             string newId = $"tutorial_{nextNumber}";
             string assetPath = $"{TUTORIALS_PATH}/{newId}.asset";
-            var tutorial = ScriptableObject.CreateInstance<TutorialDefinition>();
-            tutorial.Id = newId;
-            tutorial.CategoryId = selectedCategoryId;
-            tutorial.Title = $"New Tutorial {nextNumber}";
-            tutorial.Description = "Tutorial description";
+            var tutorial = ScriptableObject.CreateInstance<TutorialDefinitionSO>();
+            tutorial.TutorialID = newId;
             AssetDatabase.CreateAsset(tutorial, assetPath);
             AssetDatabase.SaveAssets();
-            _tutorials[tutorial.Id] = tutorial;
-            if (_categories.TryGetValue(selectedCategoryId, out var category))
-            {
-                if (!category.TutorialIds.Contains(tutorial.Id))
-                    category.TutorialIds.Add(tutorial.Id);
-                EditorUtility.SetDirty(category);
-            }
+            _tutorialAssets.Add(tutorial);
             _isDirty = false;
-            _selectedTutorial = tutorial.Id;
-            _treeView?.Refresh(_categories, _tutorials);
+            _selectedTutorial = tutorial.TutorialID;
+            // _treeView?.Refresh(_tutorialAssets);
         }
     }
 }

@@ -1,38 +1,29 @@
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityEditor;
-using UnityEditor.UIElements;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnityHelperSDK.TutorialUtilities;
 
 namespace UnityHelperSDK.Tutorial
 {
     /// <summary>
-    /// A custom TreeView implementation for displaying and managing tutorials.
-    /// Supports both runtime and editor data formats.
+    /// A custom TreeView for displaying ScriptableObject-based tutorials and their steps.
     /// </summary>
     public class TutorialTreeView : VisualElement
     {
-        public delegate void TutorialSelectionChangedHandler(string categoryId, string tutorialId);
+        public delegate void TutorialSelectionChangedHandler(TutorialDefinitionSO tutorial, StepDefinitionSO step);
         public event TutorialSelectionChangedHandler OnTutorialSelectionChanged;
 
         private TreeView _treeView;
-        private Dictionary<string, TutorialCategory> _categories;
-        private Dictionary<string, TutorialDefinition> _tutorials;
+        private List<TutorialDefinitionSO> _tutorials;
         private const float ITEM_HEIGHT = 24f;
         private List<TreeViewItemData<TutorialItemData>> _items;
 
-        /// <summary>
-        /// Initializes a new instance of the TutorialTreeView.
-        /// </summary>
-        /// <param name="categories">Dictionary of tutorial categories</param>
-        /// <param name="tutorials">Dictionary of tutorial definitions</param>
-        public TutorialTreeView(Dictionary<string, TutorialCategory> categories, Dictionary<string, TutorialDefinition> tutorials)
+        public TutorialTreeView(List<TutorialDefinitionSO> tutorials)
         {
-            _categories = categories ?? new Dictionary<string, TutorialCategory>();
-            _tutorials = tutorials ?? new Dictionary<string, TutorialDefinition>();
-            
+            _tutorials = tutorials ?? new List<TutorialDefinitionSO>();
             style.flexGrow = 1;
 
             _treeView = new TreeView
@@ -42,11 +33,9 @@ namespace UnityHelperSDK.Tutorial
                 showBorder = true,
                 showAlternatingRowBackgrounds = AlternatingRowBackground.All
             };
-
             _treeView.style.flexGrow = 1;
             _treeView.viewDataKey = "TutorialTreeView";
-            
-            // Setup makeItem and bindItem
+
             _treeView.makeItem = () => {
                 var item = new Label();
                 item.style.paddingLeft = 4;
@@ -55,109 +44,80 @@ namespace UnityHelperSDK.Tutorial
                 return item;
             };
 
-            _treeView.bindItem = (element, index) => 
+            _treeView.bindItem = (element, index) =>
             {
                 var item = element as Label;
                 var itemData = _treeView.GetItemDataForIndex<TutorialItemData>(index);
                 if (item != null && itemData != null)
                 {
                     item.text = itemData.displayName;
-                    item.style.color = string.IsNullOrEmpty(itemData.tutorialId) ? 
-                        new Color(0.7f, 0.7f, 0.7f) : // Category color
-                        Color.white; // Tutorial color
-                    item.style.unityFontStyleAndWeight = string.IsNullOrEmpty(itemData.tutorialId) ? 
-                        FontStyle.Bold : FontStyle.Normal;
+                    item.style.color = itemData.isStep ? new Color(0.85f, 0.85f, 0.85f) : Color.white;
+                    item.style.unityFontStyleAndWeight = itemData.isStep ? FontStyle.Normal : FontStyle.Bold;
                 }
             };
-            
-            _treeView.selectionChanged += OnTreeSelectionChanged;
 
+            _treeView.selectionChanged += OnTreeSelectionChanged;
             Add(_treeView);
-            Refresh(categories, tutorials);
+            Refresh(_tutorials);
         }
 
-        public void Refresh(Dictionary<string, TutorialCategory> categories, Dictionary<string, TutorialDefinition> tutorials)
+        public void Refresh(List<TutorialDefinitionSO> tutorials)
         {
-            _categories = categories ?? new Dictionary<string, TutorialCategory>();
-            _tutorials = tutorials ?? new Dictionary<string, TutorialDefinition>();
-
+            _tutorials = tutorials ?? new List<TutorialDefinitionSO>();
             var items = new List<TreeViewItemData<TutorialItemData>>();
             int id = 0;
-
-            // Create root item for "Tutorials"
-            var root = new TreeViewItemData<TutorialItemData>(
-                id++,
-                new TutorialItemData { displayName = "Tutorials", categoryId = "", tutorialId = "" }
-            );
-
-            // Create category items
-            var categoryItems = new List<TreeViewItemData<TutorialItemData>>();
-            foreach (var category in _categories.Values.OrderBy(c => c.SortOrder))
+            foreach (var tutorial in _tutorials)
             {
-                var tutorialItems = new List<TreeViewItemData<TutorialItemData>>();
-                
-                // Add tutorials for this category
-                if (category.TutorialIds != null)
+                var stepItems = new List<TreeViewItemData<TutorialItemData>>();
+                if (tutorial.Steps != null)
                 {
-                    foreach (var tutorialId in category.TutorialIds)
+                    foreach (var step in tutorial.Steps)
                     {
-                        if (_tutorials.TryGetValue(tutorialId, out var tutorial))
-                        {
-                            tutorialItems.Add(new TreeViewItemData<TutorialItemData>(
-                                id++,
-                                new TutorialItemData
-                                {
-                                    displayName = tutorial.Title ?? tutorial.Id,
-                                    categoryId = category.Id,
-                                    tutorialId = tutorial.Id
-                                }
-                            ));
-                        }
+                        if (step == null) continue;
+                        stepItems.Add(new TreeViewItemData<TutorialItemData>(
+                            id++,
+                            new TutorialItemData
+                            {
+                                displayName = step.Title ?? step.StepID,
+                                tutorial = tutorial,
+                                step = step,
+                                isStep = true
+                            }
+                        ));
                     }
                 }
-
-                // Create category item with its tutorials as children
-                categoryItems.Add(new TreeViewItemData<TutorialItemData>(
+                items.Add(new TreeViewItemData<TutorialItemData>(
                     id++,
-                    new TutorialItemData 
-                    { 
-                        displayName = category.Name,
-                        categoryId = category.Id,
-                        tutorialId = ""
+                    new TutorialItemData
+                    {
+                        displayName = tutorial.name + (!string.IsNullOrEmpty(tutorial.TutorialID) ? $" [{tutorial.TutorialID}]" : ""),
+                        tutorial = tutorial,
+                        step = null,
+                        isStep = false
                     },
-                    tutorialItems // Add tutorials as children
+                    stepItems
                 ));
             }
-
-            // Add categories under root
-            items.Add(new TreeViewItemData<TutorialItemData>(root.id, root.data, categoryItems));
             _items = items;
-
-            // Set the items source
             _treeView.SetRootItems(_items);
             _treeView.Rebuild();
-        }        
+        }
+
         private void OnTreeSelectionChanged(IEnumerable<object> items)
         {
             var selectedItem = items.FirstOrDefault() as TutorialItemData;
-            var itemData = selectedItem;
-            if (itemData != null)
+            if (selectedItem != null)
             {
-                Debug.Log($"tree view selection: Selected item - displayName: {itemData.displayName}, categoryId: {itemData.categoryId}, tutorialId: {itemData.tutorialId}");
-                // Invoke with both IDs, letting the handler determine what to do based on which one is empty
-                OnTutorialSelectionChanged?.Invoke(itemData.categoryId, itemData.tutorialId);
-            }
-            else
-            {
-            Debug.Log("tree view selection: Selected item is not an int index");
+                OnTutorialSelectionChanged?.Invoke(selectedItem.tutorial, selectedItem.step);
             }
         }
 
         private class TutorialItemData
         {
             public string displayName;
-            public string categoryId;
-            public string tutorialId;
+            public TutorialDefinitionSO tutorial;
+            public StepDefinitionSO step;
+            public bool isStep;
         }
     }
 }
